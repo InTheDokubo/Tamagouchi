@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>育成っちバトル！</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            background-color: #1e293b; /* slate-800 */
+            overflow: hidden; /* Prevent scroll */
+            touch-action: manipulation;
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        .text-outline {
+            text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+        }
+        
+        /* Animations */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .shake-anim { animation: shake 0.5s; }
+
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        .pop-anim { animation: pop 0.3s ease-out; }
+
+        @keyframes slideInUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .slide-in { animation: slideInUp 0.4s ease-out forwards; }
+
+        /* Cut-in Animation */
+        @keyframes cutInSlide {
+            0% { transform: translateX(-100%) skewX(-10deg); opacity: 0; }
+            20% { transform: translateX(0) skewX(-10deg); opacity: 1; }
+            80% { transform: translateX(0) skewX(-10deg); opacity: 1; }
+            100% { transform: translateX(100%) skewX(-10deg); opacity: 0; }
+        }
+        .cutin-anim { animation: cutInSlide 2s ease-in-out forwards; }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+            100% { transform: translateY(0px); }
+        }
+        .float-anim { animation: float 3s ease-in-out infinite; }
+
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Card Hover Effects for Desktop */
+        @media (min-width: 768px) {
+            .card-hover:hover {
+                transform: translateY(-20px) scale(1.1);
+                z-index: 50;
+            }
+        }
+        
+        .trait-badge {
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            color: #4a3b00;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 h-screen w-screen overflow-hidden">
+
+    <!-- Main Game Container: Full Screen -->
+    <div id="game-container" class="relative w-full h-full bg-white overflow-hidden flex flex-col">
+        
+        <!-- Header Info -->
+        <div id="header-panel" class="bg-slate-800 text-white p-3 flex justify-between items-center z-50 shadow-md shrink-0 h-16">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-slate-900 font-bold border-2 border-white">
+                    <span id="header-icon"><i class="fas fa-egg"></i></span>
+                </div>
+                <div>
+                    <div id="player-name-display" class="font-bold text-base leading-tight">未設定</div>
+                    <div id="phase-display" class="text-xs text-slate-300">準備中</div>
+                </div>
+                <!-- Trait Badge (Visible in Battle/Shop) -->
+                <div id="trait-display" class="hidden trait-badge text-[10px] font-black px-2 py-1 rounded-full shadow-lg border border-white/50 animate-pulse">
+                    特性: なし
+                </div>
+            </div>
+            <div class="flex flex-col items-end">
+                <div id="turn-display" class="text-2xl font-black text-yellow-400">TURN 1</div>
+                <div class="flex items-center gap-2">
+                    <div id="turn-sub" class="text-xs text-slate-400">あと10ターン</div>
+                    <div id="bp-display" class="hidden bg-slate-700 px-2 py-0.5 rounded text-xs font-bold text-yellow-300 border border-yellow-500/50">BP: 0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCENE: START SCREEN -->
+        <div id="scene-start" class="absolute inset-0 z-50 bg-gradient-to-br from-indigo-500 to-purple-600 flex flex-col items-center justify-center p-6 text-white transition-opacity duration-500">
+            <div class="mb-8 text-center float-anim">
+                <i class="fas fa-egg text-7xl mb-4 text-yellow-300"></i>
+                <h1 class="text-5xl font-extrabold mb-2 text-outline tracking-wider">育成っち<br>バトル！</h1>
+                <p class="text-lg opacity-90 mt-2">ジョブを選んで、最強の「っち」を育てろ！</p>
+            </div>
+
+            <div class="w-full max-w-md space-y-6 bg-white/10 backdrop-blur-md p-8 rounded-3xl border border-white/20 shadow-2xl">
+                <div>
+                    <label class="block text-sm font-bold mb-1 ml-1 text-indigo-100">なまえ</label>
+                    <input type="text" id="input-name" placeholder="なまえを入力" maxlength="6" class="w-full px-4 py-3 rounded-xl text-slate-800 font-bold text-lg focus:outline-none focus:ring-4 focus:ring-yellow-400 shadow-inner">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-bold mb-2 ml-1 text-indigo-100">タイプ（固有パッシブあり）</label>
+                    <div class="grid grid-cols-3 gap-3">
+                        <button onclick="Game.selectType('hp')" id="btn-type-hp" class="type-btn bg-green-500 hover:bg-green-400 p-3 rounded-xl font-bold text-sm transition transform active:scale-95 border-b-4 border-green-700 text-white shadow-lg flex flex-col items-center">
+                            <i class="fas fa-heart text-2xl mb-1"></i>
+                            <span>体力</span>
+                            <span class="text-[9px] bg-black/20 px-1 rounded mt-1">毎ターン回復</span>
+                        </button>
+                        <button onclick="Game.selectType('str')" id="btn-type-str" class="type-btn bg-red-500 hover:bg-red-400 p-3 rounded-xl font-bold text-sm transition transform active:scale-95 border-b-4 border-red-700 text-white shadow-lg flex flex-col items-center">
+                            <i class="fas fa-fist-raised text-2xl mb-1"></i>
+                            <span>攻撃</span>
+                            <span class="text-[9px] bg-black/20 px-1 rounded mt-1">開幕行動+1</span>
+                        </button>
+                        <button onclick="Game.selectType('int')" id="btn-type-int" class="type-btn bg-blue-500 hover:bg-blue-400 p-3 rounded-xl font-bold text-sm transition transform active:scale-95 border-b-4 border-blue-700 text-white shadow-lg flex flex-col items-center">
+                            <i class="fas fa-hat-wizard text-2xl mb-1"></i>
+                            <span>魔力</span>
+                            <span class="text-[9px] bg-black/20 px-1 rounded mt-1">魔法再利用</span>
+                        </button>
+                    </div>
+                </div>
+
+                <button onclick="Game.start()" class="w-full bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-black py-4 rounded-xl text-2xl shadow-xl transform transition active:translate-y-1 active:shadow-none border-b-4 border-yellow-600 mt-4">
+                    ゲームスタート！
+                </button>
+            </div>
+        </div>
+
+        <!-- SCENE: TRAINING (Split Screen) -->
+        <div id="scene-training" class="hidden absolute top-16 bottom-0 left-0 right-0 bg-slate-100 flex flex-col md:flex-row overflow-hidden">
+            <!-- Left: Character Status -->
+            <div class="flex-1 flex flex-col items-center justify-center p-6 relative md:w-1/2 md:border-r md:border-slate-200 bg-white md:bg-transparent">
+                <div class="relative w-32 h-32 mb-6 md:w-48 md:h-48 md:mb-10">
+                    <div id="char-avatar" class="w-full h-full bg-white rounded-full border-8 border-slate-800 shadow-2xl flex items-center justify-center text-6xl md:text-8xl relative z-10 float-anim">
+                        🐣
+                    </div>
+                    <div class="absolute -bottom-4 w-full h-6 bg-black/20 rounded-[100%] filter blur-md"></div>
+                </div>
+
+                <div class="w-full max-w-sm bg-white rounded-3xl shadow-xl p-6 border border-slate-200">
+                    <div class="mb-6 text-center">
+                        <div class="flex justify-between items-end mb-2">
+                            <span class="text-sm font-bold text-slate-500">現在の体力 (コスト)</span>
+                            <span class="font-black text-2xl text-green-600">
+                                <span id="train-hp-val">50</span><span class="text-base text-slate-400"> / <span id="train-maxhp-val">50</span></span>
+                            </span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-5 overflow-hidden shadow-inner">
+                            <div id="train-hp-bar" class="bg-green-500 h-full w-full transition-all duration-300"></div>
+                        </div>
+                        <div class="text-xs text-red-500 font-bold mt-2 text-right h-4">
+                            <span id="hp-warning" class="hidden"><i class="fas fa-exclamation-triangle"></i> 体力が足りません！</span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6 text-center border-t border-slate-100 pt-6">
+                        <div class="border-r border-slate-100">
+                            <div class="text-sm text-slate-400 font-bold mb-1">攻撃力</div>
+                            <div id="stat-str" class="text-4xl font-black text-red-600">5</div>
+                        </div>
+                        <div>
+                            <div class="text-sm text-slate-400 font-bold mb-1">魔力</div>
+                            <div id="stat-int" class="text-4xl font-black text-blue-600">5</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Action Buttons -->
+            <div class="bg-slate-50 p-6 z-10 md:w-1/2 md:h-full flex flex-col justify-center items-center shadow-[0_-10px_30px_rgba(0,0,0,0.05)] md:shadow-none">
+                <p class="text-center font-bold text-slate-500 mb-6 text-lg">行動を選択 (ダブルタップで決定)</p>
+                <div class="grid grid-cols-2 md:grid-cols-1 gap-4 w-full max-w-md">
+                    <button id="act-btn-hp" onclick="Game.tryAction('hp')" class="action-btn bg-green-50 hover:bg-green-100 text-green-800 p-4 rounded-2xl border-2 border-green-200 transition-all duration-200 flex flex-col md:flex-row items-center gap-2 md:gap-4 group relative overflow-hidden h-24 md:h-20">
+                        <div class="flex items-center gap-3 relative z-10 md:w-1/3 justify-center md:justify-start">
+                            <i class="fas fa-heart text-2xl md:text-3xl"></i>
+                            <span class="font-bold text-base md:text-xl">最大体力UP</span>
+                        </div>
+                        <span class="text-xs md:text-sm bg-red-100 text-red-600 font-bold px-3 py-1 rounded-full border border-red-200 relative z-10 md:ml-auto">消費: -15 HP</span>
+                        <div class="confirm-overlay absolute inset-0 bg-green-500 opacity-0 transition-opacity z-0"></div>
+                        <div class="confirm-text absolute inset-0 flex items-center justify-center font-black text-white opacity-0 z-20 text-xl tracking-widest">実行！</div>
+                    </button>
+                    
+                    <button id="act-btn-str" onclick="Game.tryAction('str')" class="action-btn bg-red-50 hover:bg-red-100 text-red-800 p-4 rounded-2xl border-2 border-red-200 transition-all duration-200 flex flex-col md:flex-row items-center gap-2 md:gap-4 group relative overflow-hidden h-24 md:h-20">
+                        <div class="flex items-center gap-3 relative z-10 md:w-1/3 justify-center md:justify-start">
+                            <i class="fas fa-dumbbell text-2xl md:text-3xl"></i>
+                            <span class="font-bold text-base md:text-xl">筋トレ</span>
+                        </div>
+                        <span class="text-xs md:text-sm bg-red-100 text-red-600 font-bold px-3 py-1 rounded-full border border-red-200 relative z-10 md:ml-auto">消費: -15 HP</span>
+                        <div class="confirm-overlay absolute inset-0 bg-red-500 opacity-0 transition-opacity z-0"></div>
+                        <div class="confirm-text absolute inset-0 flex items-center justify-center font-black text-white opacity-0 z-20 text-xl tracking-widest">実行！</div>
+                    </button>
+
+                    <button id="act-btn-int" onclick="Game.tryAction('int')" class="action-btn bg-blue-50 hover:bg-blue-100 text-blue-800 p-4 rounded-2xl border-2 border-blue-200 transition-all duration-200 flex flex-col md:flex-row items-center gap-2 md:gap-4 group relative overflow-hidden h-24 md:h-20">
+                        <div class="flex items-center gap-3 relative z-10 md:w-1/3 justify-center md:justify-start">
+                            <i class="fas fa-book text-2xl md:text-3xl"></i>
+                            <span class="font-bold text-base md:text-xl">魔術研究</span>
+                        </div>
+                        <span class="text-xs md:text-sm bg-red-100 text-red-600 font-bold px-3 py-1 rounded-full border border-red-200 relative z-10 md:ml-auto">消費: -15 HP</span>
+                        <div class="confirm-overlay absolute inset-0 bg-blue-500 opacity-0 transition-opacity z-0"></div>
+                        <div class="confirm-text absolute inset-0 flex items-center justify-center font-black text-white opacity-0 z-20 text-xl tracking-widest">実行！</div>
+                    </button>
+
+                    <button id="act-btn-rest" onclick="Game.tryAction('rest')" class="action-btn bg-yellow-100 hover:bg-yellow-200 text-yellow-900 p-4 rounded-2xl border-b-4 border-yellow-400 transition-all duration-200 flex flex-col md:flex-row items-center gap-2 md:gap-4 relative overflow-hidden h-24 md:h-20">
+                        <div class="flex items-center gap-3 relative z-10 md:w-1/3 justify-center md:justify-start">
+                            <i class="fas fa-bed text-2xl md:text-3xl"></i>
+                            <span class="font-bold text-base md:text-xl">休む</span>
+                        </div>
+                        <span class="text-xs md:text-sm bg-white px-3 py-1 rounded-full border border-yellow-200 text-green-600 font-bold relative z-10 md:ml-auto">回復: Maxの75%</span>
+                        <div class="confirm-overlay absolute inset-0 bg-yellow-500 opacity-0 transition-opacity z-0"></div>
+                        <div class="confirm-text absolute inset-0 flex items-center justify-center font-black text-white opacity-0 z-20 text-xl tracking-widest">実行！</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCENE: SHOP -->
+        <div id="scene-shop" class="hidden absolute inset-0 z-50 bg-slate-800 flex flex-col p-6">
+            <div class="flex justify-between items-center mb-6 border-b border-slate-600 pb-4">
+                <div>
+                    <h2 class="text-white text-3xl font-bold mb-1"><i class="fas fa-store text-yellow-400"></i> 補給所</h2>
+                    <p class="text-slate-400 text-sm">バトルポイント(BP)を使ってデッキを強化しよう</p>
+                </div>
+                <div class="text-right">
+                    <div class="text-yellow-400 font-black text-4xl" id="shop-bp">0 BP</div>
+                </div>
+            </div>
+
+            <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-y-auto pb-20">
+                <!-- Shop Column 1 -->
+                <div class="bg-slate-700/50 rounded-2xl p-4 border border-slate-600 flex flex-col">
+                    <h3 class="text-white font-bold text-lg mb-4 flex items-center gap-2"><i class="fas fa-arrow-up text-green-400"></i> カード強化 <span class="text-xs bg-slate-800 px-2 py-1 rounded ml-auto text-yellow-400">30 BP</span></h3>
+                    <div id="shop-upgrade-list" class="space-y-2 flex-1 overflow-y-auto pr-2 custom-scroll"></div>
+                </div>
+                <!-- Shop Column 2 -->
+                <div class="bg-slate-700/50 rounded-2xl p-4 border border-slate-600 flex flex-col">
+                    <h3 class="text-white font-bold text-lg mb-4 flex items-center gap-2"><i class="fas fa-trash-alt text-red-400"></i> カード削除 <span class="text-xs bg-slate-800 px-2 py-1 rounded ml-auto text-yellow-400">50 BP</span></h3>
+                    <div id="shop-remove-list" class="space-y-2 flex-1 overflow-y-auto pr-2 custom-scroll"></div>
+                </div>
+                <!-- Shop Column 3 -->
+                <div class="bg-slate-700/50 rounded-2xl p-4 border border-slate-600 flex flex-col">
+                    <h3 class="text-white font-bold text-lg mb-4 flex items-center gap-2"><i class="fas fa-shopping-cart text-blue-400"></i> 新規購入 <span class="text-xs bg-slate-800 px-2 py-1 rounded ml-auto text-yellow-400">40 BP</span></h3>
+                    <div id="shop-buy-list" class="space-y-2 flex-1 overflow-y-auto pr-2 custom-scroll"></div>
+                </div>
+            </div>
+
+            <div class="absolute bottom-6 right-6">
+                <button onclick="Game.leaveShop()" class="bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-bold py-4 px-8 rounded-2xl shadow-lg text-xl border-b-4 border-yellow-600 active:scale-95 transition">
+                    出発する <i class="fas fa-forward"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- SCENE: CUT-IN OVERLAY -->
+        <div id="scene-cutin" class="hidden absolute inset-0 z-40 bg-slate-900/80 flex items-center justify-center overflow-hidden">
+            <div id="cutin-content" class="w-full md:w-2/3 bg-yellow-400 py-16 transform -skew-x-12 shadow-2xl relative flex items-center justify-center border-y-8 border-white">
+                <div class="transform skew-x-12 text-center text-slate-900">
+                    <div id="cutin-icon" class="text-8xl md:text-9xl mb-4 drop-shadow-md">💪</div>
+                    <div id="cutin-title" class="text-5xl md:text-7xl font-black mb-2 text-white text-outline">筋トレ成功！</div>
+                    <div class="flex items-center justify-center gap-6 mt-4 bg-white/30 rounded-xl py-2 px-8 backdrop-blur-sm">
+                        <div id="cutin-stat" class="text-2xl md:text-4xl font-bold">攻撃力 +2</div>
+                        <div id="cutin-cost" class="text-lg md:text-2xl font-bold text-red-600 bg-red-100 px-3 py-1 rounded-lg">HP -15</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCENE: CARD DRAFT -->
+        <div id="scene-draft" class="hidden absolute inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center p-8 backdrop-blur-md">
+            <div class="text-center mb-8">
+                <h2 id="draft-title" class="text-white text-4xl font-bold mb-3 text-outline tracking-wider">カード獲得！</h2>
+                <p id="draft-subtitle" class="text-slate-300 text-lg">強化完了！1枚選んでデッキに追加</p>
+            </div>
+            
+            <div id="draft-container" class="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-6 overflow-y-auto max-h-[70vh] pb-4 px-4">
+                <!-- Cards injected via JS -->
+            </div>
+            
+            <div id="draft-skip-container" class="mt-8 w-full max-w-md hidden">
+                <button onclick="Game.skipDraft()" class="w-full bg-transparent hover:bg-slate-800 text-slate-400 font-bold py-4 rounded-xl border-2 border-slate-600 transition text-lg">
+                    今回は何も入手しない（スキップ）
+                </button>
+            </div>
+        </div>
+
+        <!-- SCENE: BATTLE -->
+        <div id="scene-battle" class="hidden absolute top-16 bottom-0 left-0 right-0 bg-slate-200 overflow-hidden select-none">
+            <div class="absolute inset-0 bg-gradient-to-b from-slate-300 to-slate-200 z-0 pointer-events-none"></div>
+
+            <!-- ENEMY AREA -->
+            <div class="absolute top-0 left-0 right-0 h-[45%] flex flex-col items-center justify-center z-10 pt-4">
+                <div class="absolute top-4 right-4 flex gap-3 text-xs md:text-sm font-bold text-slate-600 bg-white/50 backdrop-blur p-2 rounded-lg shadow-sm">
+                    <div class="flex items-center gap-1"><i class="fas fa-layer-group"></i> 山札: <span id="battle-deck-count">10</span></div>
+                    <div class="flex items-center gap-1"><i class="fas fa-trash-alt"></i> 捨札: <span id="battle-discard-count">0</span></div>
+                    <div class="flex items-center gap-1"><i class="fas fa-ban"></i> 除外: <span id="battle-exhaust-count">0</span></div>
+                </div>
+
+                <div id="enemy-sprite" class="text-8xl md:text-9xl mb-3 transition-transform duration-100 drop-shadow-2xl filter hover:brightness-110">👿</div>
+                
+                <div class="text-center w-64 md:w-80 bg-white/40 backdrop-blur-sm rounded-xl p-3 shadow-sm border border-white/50">
+                    <div id="enemy-name" class="font-bold text-xl text-slate-800 mb-1">わるいっち</div>
+                    <div class="w-full bg-slate-300 h-5 rounded-full relative overflow-hidden shadow-inner border border-slate-400 mb-2">
+                        <div id="enemy-hp-bar" class="bg-purple-600 h-full w-full transition-all duration-300"></div>
+                        <div id="enemy-hp-text" class="absolute inset-0 flex items-center justify-center text-xs text-white font-bold tracking-wider">100/100</div>
+                    </div>
+                    <div id="enemy-intent" class="flex items-center justify-center gap-2 text-base font-bold text-red-600 bg-red-100 py-1 px-4 rounded-full inline-block shadow-sm">
+                        <i class="fas fa-sword"></i> <span>攻撃 10</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PLAYER STATUS -->
+            <div class="absolute top-[52%] left-4 md:left-24 transform -translate-y-1/2 z-20 flex flex-col gap-3 w-40 md:w-56">
+                <div class="bg-white rounded-2xl p-3 shadow-lg border-2 border-slate-100">
+                    <div class="flex items-center gap-2 mb-1">
+                        <div class="bg-green-100 text-green-600 p-1.5 rounded-lg"><i class="fas fa-heart text-xl"></i></div>
+                        <div class="font-black text-2xl text-slate-800"><span id="battle-player-hp">50</span><span class="text-sm text-slate-400">/</span><span id="battle-player-maxhp" class="text-base text-slate-500">50</span></div>
+                    </div>
+                    <div id="battle-block" class="hidden bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold text-sm border border-blue-100 flex items-center gap-2 mt-1">
+                        <i class="fas fa-shield-alt"></i> <span id="battle-block-val">0</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 rounded-xl p-3 shadow-lg text-white">
+                    <div class="text-[10px] font-bold text-slate-400 mb-1">行動権</div>
+                    <div class="flex gap-2" id="action-point-container"></div>
+                </div>
+            </div>
+
+            <!-- HAND AREA -->
+            <div class="absolute bottom-0 left-0 right-0 h-[40%] md:h-[35%] flex justify-center items-end pb-6 z-30 pointer-events-none">
+                <div id="hand-container" class="flex justify-center items-end gap-2 md:gap-4 px-4 overflow-visible w-full max-w-6xl pointer-events-auto flex-wrap md:flex-nowrap">
+                    <!-- Cards injected here -->
+                </div>
+            </div>
+
+            <!-- END TURN BUTTON -->
+            <div class="absolute bottom-6 right-6 md:bottom-10 md:right-10 z-40">
+                <button onclick="Game.endTurn()" id="btn-end-turn" class="bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 px-8 rounded-2xl shadow-xl active:scale-95 transition flex items-center gap-3 text-lg border-b-4 border-slate-950">
+                    <span>ターン終了</span> <i class="fas fa-forward"></i>
+                </button>
+            </div>
+            
+            <div id="turn-banner" class="absolute top-1/2 left-0 right-0 py-8 bg-yellow-400/95 text-center transform -translate-y-1/2 scale-0 transition-transform duration-300 z-50 pointer-events-none shadow-2xl backdrop-blur-sm">
+                <span class="text-4xl md:text-7xl font-black text-white text-outline tracking-widest">ENEMY TURN</span>
+            </div>
+        </div>
+
+        <!-- SCENE: GAME OVER / RESULT -->
+        <div id="scene-result" class="hidden absolute inset-0 z-50 bg-slate-900/95 flex flex-col items-center justify-center p-6 text-white">
+            <div class="text-center mb-12">
+                <div id="result-icon" class="text-8xl mb-6">💀</div>
+                <h2 id="result-title" class="text-4xl font-bold mb-4">ちからつきた…</h2>
+                <div class="text-2xl opacity-80 mb-8">スコア (撃破数)</div>
+                <div class="flex items-baseline justify-center gap-2">
+                    <div id="result-score" class="text-8xl font-black text-yellow-400">3</div>
+                    <div class="text-2xl text-slate-400 font-bold">体</div>
+                </div>
+            </div>
+
+            <div class="w-full max-w-sm space-y-4">
+                <button onclick="location.reload()" class="w-full bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-black py-5 rounded-2xl text-xl shadow-lg transform transition active:translate-y-1 active:shadow-none border-b-4 border-yellow-600">
+                    もう一度挑戦する！
+                </button>
+            </div>
+        </div>
+
+        <!-- Toast Notification -->
+        <div id="toast" class="absolute top-24 left-1/2 transform -translate-x-1/2 bg-slate-800/95 text-white px-6 py-3 rounded-full text-base font-bold shadow-xl opacity-0 transition duration-300 pointer-events-none z-[100] whitespace-nowrap border border-slate-600">
+            Notification
+        </div>
+
+    </div>
+
+    <!-- SCRIPT -->
+    <script>
+        /* --- DATA & CONFIG --- */
+        const CARDS_DB = [
+            // --- BASIC ---
+            { id: 'punch', name: 'パンチ', type: 'phys', attr: 'str', val: 1.0, desc: '攻撃力の100%ダメージ。', icon: 'fa-fist-raised' },
+            { id: 'kick', name: 'キック', type: 'phys', attr: 'str', val: 2.2, desc: '攻撃力の220%ダメージ。', icon: 'fa-shoe-prints' },
+            { id: 'spark', name: 'プチ魔法', type: 'mag', attr: 'int', val: 1.0, desc: '魔力の100%魔法ダメージ。', icon: 'fa-bolt' },
+            { id: 'defend', name: '防御', type: 'def', attr: 'common', val: 10, desc: 'ブロック10を得る。', icon: 'fa-shield-alt' },
+            
+            // --- COMMON UTILITY ---
+            { id: 'quick_think', name: '思考加速', type: 'skill', attr: 'common', add_action: true, draw: 2, exhaust: true, limit: 2, desc: '2枚引いて行動権+1。[1回のみ/デッキ2枚まで]', icon: 'fa-brain' },
+            { id: 'prepare', name: '仕込み', type: 'skill', attr: 'common', effect: 'next_draw', val: 2, desc: '次のターン開始時に2枚多く引く。', icon: 'fa-toolbox' },
+            { id: 'meditate', name: '瞑想', type: 'skill', attr: 'common', effect: 'action_up', val: 1, add_action: true, desc: '次のターン行動回数+1。続けて行動可。', icon: 'fa-om' },
+            { id: 'cheer', name: '声援', type: 'buff', attr: 'common', effect: 'str_up', val: 1, add_action: true, draw: 1, desc: '攻撃+1。1枚引く。続けて行動可。', icon: 'fa-bullhorn' },
+
+            // --- STR FOCUSED (New Cards Added) ---
+            { id: 'tackle', name: 'タックル', type: 'phys', attr: 'str', val: 0.5, extra: 'hp_scale', desc: '攻撃50% + 現在HPの10%ダメージ。', icon: 'fa-football-ball' },
+            { id: 'rage', name: '激怒', type: 'buff', attr: 'str', effect: 'str_up', val: 3, add_action: true, desc: '攻撃力+3。続けて行動できる。', icon: 'fa-fire' },
+            { id: 'multi', name: '連続拳', type: 'phys', attr: 'str', val: 0.7, hits: 2, add_action: true, desc: '70%の2回攻撃。続けて行動できる。', icon: 'fa-users' },
+            { id: 'heavy', name: '本気パンチ', type: 'phys', attr: 'str', val: 4.0, exhaust: true, desc: '攻撃力の400%の大ダメージ。[1回のみ]', icon: 'fa-hammer' },
+            { id: 'quick', name: 'ジャブ', type: 'phys', attr: 'str', val: 0.8, add_action: true, desc: '攻撃80%ダメ。続けて行動できる。', icon: 'fa-wind' },
+            // New Unique STR
+            { id: 'life_burn', name: '羅刹撃', type: 'phys', attr: 'str', val: 3.5, self_dmg: 5, desc: '攻撃350%ダメ。自分も5ダメ受ける。', icon: 'fa-skull-crossbones' },
+            { id: 'draw_slash', name: '燕返し', type: 'phys', attr: 'str', val: 1.5, draw: 1, desc: '攻撃150%ダメ。カードを1枚引く。', icon: 'fa-feather-alt' },
+
+            // --- INT FOCUSED (New Cards Added) ---
+            { id: 'fireball', name: '炎魔法', type: 'mag', attr: 'int', val: 2.5, exhaust: true, desc: '魔力の250%魔法ダメージ。[1回のみ]', icon: 'fa-fire-alt' },
+            { id: 'barrier', name: 'バリア', type: 'def', attr: 'int', val: 2.0, desc: '魔力200%分のブロックを得る。', icon: 'fa-shield-alt' },
+            { id: 'thunder', name: '雷撃', type: 'mag', attr: 'int', val: 1.5, add_action: true, desc: '魔力150%ダメ。続けて行動できる。', icon: 'fa-poo-storm' },
+            { id: 'mana_charge', name: '魔力充填', type: 'buff', attr: 'int', effect: 'int_up', val: 3, add_action: true, desc: '魔力+3。続けて行動できる。', icon: 'fa-magic' },
+            // New Unique INT
+            { id: 'grimoire', name: '魔道書', type: 'skill', attr: 'int', draw: 1, effect: 'reduce_cost', desc: '1枚引き、次の魔法ダメ+5。', icon: 'fa-book-open' }, 
+            { id: 'future_sight', name: '未来予知', type: 'skill', attr: 'int', effect: 'next_draw', val: 3, exhaust: true, desc: '次のターン3枚多く引く。[1回のみ]', icon: 'fa-eye' },
+
+            // --- HP FOCUSED (New Cards Added) ---
+            { id: 'bandage', name: '絆創膏', type: 'heal', attr: 'hp', val: 10, exhaust: true, desc: 'HP10回復。[1回のみ]', icon: 'fa-band-aid' },
+            { id: 'rest', name: '深呼吸', type: 'heal', attr: 'hp', val: 25, exhaust: true, desc: 'HP25回復。[1回のみ]', icon: 'fa-spa' },
+            { id: 'muscle', name: 'ビルドアップ', type: 'buff', attr: 'hp', effect: 'maxhp_up', val: 5, add_action: true, desc: '最大HP+5、HP5回復。続けて行動できる。', icon: 'fa-heartbeat' },
+            { id: 'counter', name: '構える', type: 'def', attr: 'common', val: 15, desc: 'ブロック15を得る。', icon: 'fa-hand-paper' },
+            // New Unique HP
+            { id: 'life_share', name: '生命転換', type: 'phys', attr: 'hp', val: 0, extra: 'hp_dmg_half', desc: '現在HPの50%分のダメージを与える。', icon: 'fa-balance-scale' },
+            { id: 'endure', name: '不屈', type: 'def', attr: 'hp', val: 30, exhaust: true, desc: 'ブロック30を得る。[1回のみ]', icon: 'fa-mountain' },
+
+            // --- BATTLE REWARDS (Rare) ---
+            { id: 'dragon_fist', name: 'ドラゴン拳', type: 'phys', attr: 'str', val: 5.0, exhaust: true, rarity: 'rare', pool: 'str', desc: '攻撃力の500%の超ダメージ。[1回のみ]', icon: 'fa-dragon' },
+            { id: 'blood_sucker', name: '吸血撃', type: 'phys', attr: 'str', val: 2.0, extra: 'drain', rarity: 'rare', pool: 'str', desc: '攻撃200%ダメ。与ダメの50%回復。', icon: 'fa-tint' },
+            { id: 'god_strength', name: '鬼神化', type: 'buff', attr: 'str', effect: 'str_up', val: 5, add_action: true, rarity: 'rare', pool: 'str', desc: '攻撃力+5。続けて行動できる。', icon: 'fa-mask' },
+
+            { id: 'meteor', name: 'メテオ', type: 'mag', attr: 'int', val: 6.0, exhaust: true, rarity: 'rare', pool: 'int', desc: '魔力600%の破壊的ダメージ。[1回のみ]', icon: 'fa-meteor' },
+            { id: 'time_warp', name: '時渡り', type: 'skill', attr: 'int', effect: 'action_up', val: 2, exhaust: true, rarity: 'rare', pool: 'int', desc: '次ターンの行動回数+2。[1回のみ]', icon: 'fa-hourglass-half' },
+            { id: 'absolute_barrier', name: '絶対防御', type: 'def', attr: 'int', val: 50, exhaust: true, rarity: 'rare', pool: 'int', desc: 'ブロック50を得る。[1回のみ]', icon: 'fa-shield-virus' },
+
+            { id: 'titan_body', name: '巨人の体', type: 'buff', attr: 'hp', effect: 'maxhp_up', val: 20, rarity: 'rare', pool: 'hp', desc: '最大HP+20、HP20回復。', icon: 'fa-mountain' },
+            { id: 'grand_slam', name: 'プレス', type: 'phys', attr: 'hp', val: 0, extra: 'hp_dmg', rarity: 'rare', pool: 'hp', desc: '現在のHPと同じダメージを与える。', icon: 'fa-weight-hanging' },
+            { id: 'super_heal', name: '大回復', type: 'heal', attr: 'hp', val: 50, exhaust: true, rarity: 'rare', pool: 'hp', desc: 'HPを50回復する。[1回のみ]', icon: 'fa-first-aid' },
+        ];
+
+        const HIRAGANA = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん";
+
+        /* --- STATE MANAGEMENT --- */
+        const State = {
+            phase: 'start',
+            name: '',
+            playerType: 'hp',
+            turn: 1,
+            maxTurns: 10,
+            bp: 0,
+            
+            selectedAction: null,
+            hp: 50,
+            maxHp: 50,
+            str: 5,
+            int: 5,
+            deck: [],
+            
+            battle: {
+                active: false,
+                enemiesDefeated: 0,
+                enemy: null,
+                hand: [],
+                drawPile: [],
+                discardPile: [],
+                exhaustPile: [],
+                actionsLeft: 1,
+                actionsNextTurn: 1,
+                drawNextTurn: 0,
+                block: 0,
+                turnCount: 0,
+                playerTempStr: 0,
+                playerTempInt: 0,
+                magBonus: 0, // For Grimoire effect
+                processing: false
+            }
+        };
+
+        const CONSTANTS = {
+            TRAIN_COST: 15,
+            HP_GAIN: 10,
+            STAT_GAIN: 2,
+            REST_RECOVERY_RATE: 0.75,
+            DRAW_COUNT: 3,
+            COST_UPGRADE: 30,
+            COST_REMOVE: 50,
+            COST_BUY: 40
+        };
+
+        /* --- LOGIC CONTROLLER --- */
+        const Game = {
+            selectType: (type) => {
+                Game.tempType = type;
+                document.querySelectorAll('.type-btn').forEach(b => {
+                    b.classList.remove('ring-4', 'ring-yellow-400');
+                    b.classList.add('opacity-70');
+                });
+                const btn = document.getElementById(`btn-type-${type}`);
+                btn.classList.add('ring-4', 'ring-yellow-400');
+                btn.classList.remove('opacity-70');
+            },
+
+            start: () => {
+                const input = document.getElementById('input-name');
+                let name = input.value.trim() || 'ななし';
+                State.name = name + 'っち';
+                State.phase = 'training';
+                State.playerType = Game.tempType || 'hp';
+                
+                State.hp = 50; State.maxHp = 50; State.str = 5; State.int = 5; State.turn = 1; State.bp = 0;
+                State.deck = [];
+                State.selectedAction = null;
+
+                // Initial Deck
+                Game.addCard('punch');
+                Game.addCard('punch');
+                Game.addCard('defend');
+                
+                if (State.playerType === 'hp') { 
+                    State.maxHp = 60; State.hp = 60; 
+                    Game.addCard('bandage'); Game.addCard('tackle'); 
+                    document.getElementById('trait-display').innerText = "特性: 自然治癒 (毎T回復)";
+                } else if (State.playerType === 'str') { 
+                    State.str = 8; 
+                    Game.addCard('kick'); Game.addCard('rage'); 
+                    document.getElementById('trait-display').innerText = "特性: 先手必勝 (開幕AP+1)";
+                } else if (State.playerType === 'int') { 
+                    State.int = 8; 
+                    Game.addCard('spark'); Game.addCard('barrier'); 
+                    document.getElementById('trait-display').innerText = "特性: 魔力循環 (魔法再利用)";
+                }
+                
+                document.getElementById('trait-display').classList.remove('hidden');
+
+                UI.updateHeader();
+                UI.changeScene('scene-training');
+                UI.updateTraining();
+                UI.toast(`誕生！${State.name}！`);
+            },
+
+            addCard: (id) => {
+                const card = CARDS_DB.find(c => c.id === id);
+                if(card) {
+                    State.deck.push({...card, uid: Math.random(), upgraded: false});
+                }
+            },
+            
+            countCard: (id) => {
+                return State.deck.filter(c => c.id === id).length;
+            },
+
+            // --- TRAINING ---
+            tryAction: (type) => {
+                if (State.selectedAction !== type) {
+                    State.selectedAction = type;
+                    UI.updateActionButtons();
+                    UI.toast("もう一度タップで決定");
+                    return;
+                }
+                Game.executeAction(type);
+            },
+            executeAction: (type) => {
+                State.selectedAction = null;
+                UI.updateActionButtons();
+                if (type === 'rest') Game.doRest(); else Game.doTrain(type);
+            },
+            doTrain: (type) => {
+                if (State.hp <= CONSTANTS.TRAIN_COST) {
+                    UI.toast("体力が足りない！");
+                    UI.animShake('#train-hp-bar');
+                    document.getElementById('hp-warning').classList.remove('hidden');
+                    return;
+                }
+                State.hp -= CONSTANTS.TRAIN_COST;
+                
+                let gainStat = ""; let gainVal = 0; let title = ""; let icon = "";
+                if (type === 'hp') {
+                    State.maxHp += CONSTANTS.HP_GAIN; gainStat = "最大体力"; gainVal = CONSTANTS.HP_GAIN; title = "体力強化！"; icon = "💖";
+                } else if (type === 'str') {
+                    State.str += CONSTANTS.STAT_GAIN; gainStat = "攻撃力"; gainVal = CONSTANTS.STAT_GAIN; title = "筋トレ成功！"; icon = "💪";
+                } else if (type === 'int') {
+                    State.int += CONSTANTS.STAT_GAIN; gainStat = "魔力"; gainVal = CONSTANTS.STAT_GAIN; title = "研究成果！"; icon = "🔮";
+                }
+                UI.updateTraining();
+                UI.showCutin({ icon, title, statText: `${gainStat} +${gainVal}`, costText: `HP -${CONSTANTS.TRAIN_COST}`, onComplete: () => UI.showDraft(type, 'training') });
+            },
+            doRest: () => {
+                const healAmount = Math.floor(State.maxHp * CONSTANTS.REST_RECOVERY_RATE);
+                const oldHp = State.hp;
+                State.hp = Math.min(State.maxHp, State.hp + healAmount);
+                UI.updateTraining();
+                UI.showCutin({ icon: "💤", title: "リフレッシュ", statText: `HP +${State.hp - oldHp}`, costText: `全快まであと${State.maxHp - State.hp}`, onComplete: () => Game.advanceTurn() });
+            },
+            
+            draftCard: (cardId) => {
+                Game.addCard(cardId);
+                document.getElementById('scene-draft').classList.add('hidden');
+                UI.toast("カードを習得！");
+                
+                if (State.phase === 'training') {
+                    Game.advanceTurn();
+                } else if (State.phase === 'battle') {
+                    Game.checkBattleProgress();
+                }
+            },
+
+            skipDraft: () => {
+                document.getElementById('scene-draft').classList.add('hidden');
+                UI.toast("報酬をスキップしました");
+                Game.checkBattleProgress();
+            },
+
+            advanceTurn: () => {
+                UI.updateTraining();
+                document.getElementById('hp-warning').classList.add('hidden');
+                if (State.turn >= State.maxTurns) {
+                    UI.toast("育成期間終了！バトルへ！");
+                    setTimeout(() => Game.initBattle(), 1500);
+                } else {
+                    State.turn++;
+                    UI.updateHeader();
+                }
+            },
+
+            // --- BATTLE LOGIC ---
+            initBattle: () => {
+                State.phase = 'battle';
+                State.battle.active = true;
+                State.battle.enemiesDefeated = 0;
+                State.battle.processing = false;
+                document.getElementById('bp-display').classList.remove('hidden');
+                if (State.hp <= 0) State.hp = 1;
+                UI.changeScene('scene-battle');
+                Game.spawnEnemy();
+            },
+
+            spawnEnemy: () => {
+                const level = State.battle.enemiesDefeated;
+                let nameLen = Math.floor(Math.random() * 3) + 2; 
+                let nameStr = "";
+                for(let i=0; i<nameLen; i++) nameStr += HIRAGANA[Math.floor(Math.random() * HIRAGANA.length)];
+                nameStr += "っち";
+
+                const eMaxHp = 30 + (level * 15);
+                const eAtk = 5 + (level * 2);
+
+                State.battle.enemy = { name: nameStr, maxHp: eMaxHp, hp: eMaxHp, baseAtk: eAtk, intent: 'atk', level: level + 1 };
+                
+                State.battle.drawPile = Game.shuffle([...State.deck]);
+                State.battle.discardPile = [];
+                State.battle.exhaustPile = [];
+                State.battle.hand = [];
+                State.battle.turnCount = 0;
+                
+                // Trait Logic: Start Dash (STR)
+                if (State.playerType === 'str') {
+                    State.battle.actionsNextTurn = 2; // +1 start
+                    UI.toast("【特性】先手必勝！");
+                } else {
+                    State.battle.actionsNextTurn = 1;
+                }
+                
+                State.battle.drawNextTurn = 0;
+                State.battle.playerTempStr = 0;
+                State.battle.playerTempInt = 0;
+                State.battle.magBonus = 0;
+                State.battle.processing = false;
+                
+                UI.toast(`${nameStr} (Lv.${level+1}) があらわれた！`);
+                Game.startBattleTurn();
+            },
+
+            startBattleTurn: () => {
+                State.battle.actionsLeft = State.battle.actionsNextTurn; 
+                State.battle.actionsNextTurn = 1;
+                State.battle.block = 0;
+                State.battle.processing = false;
+                
+                const drawCount = CONSTANTS.DRAW_COUNT + State.battle.drawNextTurn;
+                State.battle.drawNextTurn = 0; // Reset bonus draw
+
+                Game.drawCards(drawCount);
+                UI.updateBattle();
+                UI.updateHeader();
+            },
+
+            shuffle: (array) => array.sort(() => Math.random() - 0.5),
+
+            drawCards: (num) => {
+                for(let i=0; i<num; i++) {
+                    if (State.battle.drawPile.length === 0) {
+                        if (State.battle.discardPile.length > 0) {
+                            State.battle.drawPile = Game.shuffle([...State.battle.discardPile]);
+                            State.battle.discardPile = [];
+                            UI.toast("捨て札を山札に戻した！");
+                        } else {
+                            break;
+                        }
+                    }
+                    if (State.battle.drawPile.length > 0) {
+                        State.battle.hand.push(State.battle.drawPile.pop());
+                    }
+                }
+            },
+
+            playCard: (handIndex) => {
+                if (State.battle.processing) return;
+                const card = State.battle.hand[handIndex];
+                
+                if (State.battle.actionsLeft <= 0) {
+                    UI.toast("行動権がありません！");
+                    UI.animShake('#action-point-container');
+                    return;
+                }
+
+                State.battle.actionsLeft--;
+
+                // Base stats
+                let str = State.str + State.battle.playerTempStr;
+                let int = State.int + State.battle.playerTempInt;
+
+                // --- Effect Logic ---
+                if (card.type === 'phys') {
+                    let dmg = Math.floor(str * card.val);
+                    if (card.extra === 'hp_scale') dmg += Math.floor(State.hp * 0.1);
+                    if (card.extra === 'hp_dmg') dmg = State.hp;
+                    if (card.extra === 'hp_dmg_half') dmg = Math.floor(State.hp * 0.5);
+                    if (card.extra === 'drain') {
+                        let drainAmt = Math.floor(dmg * 0.5);
+                        State.hp = Math.min(State.maxHp, State.hp + drainAmt);
+                        UI.toast(`HP ${drainAmt} 吸収`);
+                    }
+                    if (card.self_dmg) {
+                        State.hp -= card.self_dmg;
+                        UI.animShake('#game-container');
+                        UI.toast(`反動 ${card.self_dmg} ダメージ`);
+                    }
+                    
+                    if (card.hits) {
+                        for(let k=0; k<card.hits; k++) Game.dealDamage(dmg);
+                    } else {
+                        Game.dealDamage(dmg);
+                    }
+                } else if (card.type === 'mag') {
+                    let dmg = Math.floor(int * card.val) + State.battle.magBonus;
+                    Game.dealDamage(dmg);
+                } else if (card.type === 'heal') {
+                    let heal = card.val;
+                    State.hp = Math.min(State.maxHp, State.hp + heal);
+                    UI.toast(`HP ${heal} 回復`);
+                } else if (card.type === 'def') {
+                    let blk = card.val;
+                    if (card.id === 'barrier') blk = Math.floor(int * 2);
+                    State.battle.block += blk;
+                    UI.toast(`ブロック ${blk}`);
+                } else if (card.type === 'buff' || card.type === 'skill') {
+                    if (card.effect === 'str_up') {
+                        State.battle.playerTempStr += card.val;
+                        UI.toast(`攻撃力 +${card.val}`);
+                    } else if (card.effect === 'int_up') {
+                        State.battle.playerTempInt += card.val;
+                        UI.toast(`魔力 +${card.val}`);
+                    } else if (card.effect === 'action_up') {
+                        State.battle.actionsNextTurn += card.val;
+                        UI.toast(`次ターン行動回数 +${card.val}`);
+                    } else if (card.effect === 'maxhp_up') {
+                        State.maxHp += card.val;
+                        State.hp += 20;
+                        UI.toast(`最大HP増強！`);
+                    } else if (card.effect === 'next_draw') {
+                        State.battle.drawNextTurn += card.val;
+                        UI.toast(`次ターン追加ドロー`);
+                    } else if (card.effect === 'reduce_cost') {
+                        State.battle.magBonus += 5; // Simplified effect for Grimoire
+                        UI.toast(`魔法威力UP状態`);
+                    }
+                }
+
+                if (card.draw) Game.drawCards(card.draw);
+                if (card.add_action) State.battle.actionsLeft++;
+
+                // Trait Logic: INT Recycle
+                let recycle = false;
+                if (State.playerType === 'int' && (card.type === 'mag' || card.attr === 'int')) {
+                    if (Math.random() < 0.2) { // 20% chance
+                        recycle = true;
+                        UI.toast("【特性】魔力循環！");
+                    }
+                }
+
+                // Move Card
+                State.battle.hand.splice(handIndex, 1);
+                if (recycle) {
+                    State.battle.hand.push(card); // Return to hand
+                } else if (card.exhaust) {
+                    State.battle.exhaustPile.push(card);
+                } else {
+                    State.battle.discardPile.push(card);
+                }
+
+                UI.updateBattle();
+                
+                if (State.battle.enemy.hp <= 0) Game.winBattle();
+            },
+
+            dealDamage: (amount) => {
+                State.battle.enemy.hp -= amount;
+                UI.animShake('#enemy-sprite');
+            },
+
+            endTurn: () => {
+                if (State.battle.processing) return;
+                State.battle.processing = true;
+
+                // Trait Logic: HP Regen
+                if (State.playerType === 'hp') {
+                    let regen = Math.floor(State.maxHp * 0.05);
+                    if(State.hp < State.maxHp) {
+                        State.hp = Math.min(State.maxHp, State.hp + regen);
+                        UI.toast(`【特性】自然治癒 +${regen}`);
+                    }
+                }
+
+                while(State.battle.hand.length > 0) {
+                    State.battle.discardPile.push(State.battle.hand.pop());
+                }
+                
+                UI.updateBattle();
+                const banner = document.getElementById('turn-banner');
+                banner.classList.remove('scale-0');
+                
+                setTimeout(() => {
+                    Game.enemyAction();
+                    banner.classList.add('scale-0');
+                }, 1000);
+            },
+
+            enemyAction: () => {
+                if (State.battle.enemy.hp <= 0) return;
+                let dmg = State.battle.enemy.baseAtk;
+                let blocked = Math.min(State.battle.block, dmg);
+                let actualDmg = dmg - blocked;
+                
+                if (actualDmg > 0) {
+                    State.hp -= actualDmg;
+                    UI.animShake('#game-container');
+                    UI.toast(`${actualDmg} のダメージを受けた！`);
+                } else {
+                    UI.toast("ガードした！");
+                }
+
+                if (State.hp <= 0) {
+                    Game.gameOver();
+                } else {
+                    State.battle.turnCount++;
+                    Game.startBattleTurn();
+                }
+            },
+
+            winBattle: () => {
+                if(State.battle.enemy.hp > 0) return; 
+                State.battle.processing = true; 
+                State.battle.enemiesDefeated++;
+                const gainedBP = 10 + (State.battle.enemy.level * 5);
+                State.bp += gainedBP;
+                
+                UI.toast(`${State.battle.enemy.name} を倒した！ BP+${gainedBP}`);
+                
+                setTimeout(() => {
+                    UI.showDraft(State.playerType, 'battle_reward');
+                }, 1000);
+            },
+
+            checkBattleProgress: () => {
+                if (State.battle.enemiesDefeated > 0 && State.battle.enemiesDefeated % 5 === 0) {
+                    Game.visitShop();
+                } else {
+                    State.hp = Math.min(State.maxHp, State.hp + 5);
+                    Game.spawnEnemy();
+                }
+            },
+
+            // --- SHOP LOGIC ---
+            visitShop: () => {
+                UI.changeScene('scene-shop');
+                UI.updateShop();
+            },
+
+            leaveShop: () => {
+                UI.changeScene('scene-battle');
+                State.hp = Math.min(State.maxHp, State.hp + 10);
+                Game.spawnEnemy();
+            },
+
+            upgradeCard: (uid) => {
+                if (State.bp < CONSTANTS.COST_UPGRADE) {
+                    UI.toast("BPが足りません");
+                    return;
+                }
+                const card = State.deck.find(c => c.uid === uid);
+                if (card && !card.upgraded) {
+                    State.bp -= CONSTANTS.COST_UPGRADE;
+                    card.upgraded = true;
+                    if (card.val) card.val = parseFloat((card.val * 1.5).toFixed(1));
+                    if (card.draw) card.draw = Math.ceil(card.draw * 1.5);
+                    card.name += "+";
+                    card.desc = card.desc.replace(/(\d+)(%)/g, (match, num, unit) => Math.floor(parseInt(num) * 1.5) + unit);
+                    card.desc = card.desc.replace(/(\d+)(\s*)(回復|ダメージ|ブロック)/g, (match, num, space, word) => Math.floor(parseInt(num) * 1.5) + space + word);
+                    if (!card.desc.includes('UP') && !card.desc.includes('+')) card.desc += " [性能UP]";
+                    UI.toast("カードを強化しました！");
+                    UI.updateShop();
+                }
+            },
+
+            removeCard: (uid) => {
+                if (State.bp < CONSTANTS.COST_REMOVE) {
+                    UI.toast("BPが足りません");
+                    return;
+                }
+                const idx = State.deck.findIndex(c => c.uid === uid);
+                if (idx > -1) {
+                    State.bp -= CONSTANTS.COST_REMOVE;
+                    State.deck.splice(idx, 1);
+                    UI.toast("カードを削除しました");
+                    UI.updateShop();
+                }
+            },
+
+            buyCard: (cardId) => {
+                if (State.bp < CONSTANTS.COST_BUY) {
+                    UI.toast("BPが足りません");
+                    return;
+                }
+                const cardInfo = CARDS_DB.find(c => c.id === cardId);
+                if(cardInfo && cardInfo.limit) {
+                    if(Game.countCard(cardId) >= cardInfo.limit) {
+                        UI.toast("所持上限です");
+                        return;
+                    }
+                }
+                Game.addCard(cardId);
+                State.bp -= CONSTANTS.COST_BUY;
+                UI.toast("カードを購入しました！");
+                UI.updateShop();
+            },
+
+            gameOver: () => {
+                State.battle.processing = true;
+                UI.changeScene('scene-result');
+                document.getElementById('result-score').innerText = State.battle.enemiesDefeated;
+            }
+        };
+
+        const UI = {
+            changeScene: (id) => {
+                document.querySelectorAll('[id^="scene-"]').forEach(el => el.classList.add('hidden'));
+                const el = document.getElementById(id);
+                el.classList.remove('hidden');
+                if(id === 'scene-start') el.classList.add('slide-in');
+            },
+
+            updateHeader: () => {
+                document.getElementById('player-name-display').innerText = State.name;
+                const ph = State.phase === 'training' ? '育成中' : (State.phase === 'battle' ? `戦闘中 (${State.battle.enemiesDefeated}体目)` : '準備');
+                document.getElementById('phase-display').innerText = ph;
+                document.getElementById('shop-bp').innerText = `${State.bp} BP`;
+                document.getElementById('bp-display').innerText = `BP: ${State.bp}`;
+                
+                if (State.phase === 'training') {
+                    document.getElementById('turn-display').innerText = `残り ${11 - State.turn}日`;
+                    document.getElementById('turn-sub').innerText = `${State.turn}/10ターン目`;
+                } else {
+                    document.getElementById('turn-display').innerText = `TURN ${State.battle.turnCount+1}`;
+                    document.getElementById('turn-sub').innerText = "";
+                }
+            },
+
+            updateTraining: () => {
+                document.getElementById('train-maxhp-val').innerText = State.maxHp;
+                document.getElementById('train-hp-val').innerText = State.hp;
+                document.getElementById('stat-str').innerText = State.str;
+                document.getElementById('stat-int').innerText = State.int;
+                
+                const hpPct = Math.min(100, (State.hp / State.maxHp) * 100);
+                document.getElementById('train-hp-bar').style.width = `${hpPct}%`;
+                
+                const bar = document.getElementById('train-hp-bar');
+                if (State.hp <= CONSTANTS.TRAIN_COST) {
+                    bar.classList.remove('bg-green-500');
+                    bar.classList.add('bg-red-500', 'shake-anim');
+                } else {
+                    bar.classList.add('bg-green-500');
+                    bar.classList.remove('bg-red-500', 'shake-anim');
+                }
+            },
+
+            updateActionButtons: () => {
+                const actions = ['hp', 'str', 'int', 'rest'];
+                actions.forEach(act => {
+                    const btn = document.getElementById(`act-btn-${act}`);
+                    const overlay = btn.querySelector('.confirm-overlay');
+                    const text = btn.querySelector('.confirm-text');
+                    
+                    if (State.selectedAction === act) {
+                        btn.classList.add('ring-4', 'ring-yellow-400', 'scale-105');
+                        btn.classList.remove('opacity-60');
+                        overlay.style.opacity = '0.9';
+                        text.style.opacity = '1';
+                    } else {
+                        btn.classList.remove('ring-4', 'ring-yellow-400', 'scale-105');
+                        overlay.style.opacity = '0';
+                        text.style.opacity = '0';
+                        if (State.selectedAction) btn.classList.add('opacity-60');
+                        else btn.classList.remove('opacity-60');
+                    }
+                });
+            },
+
+            showCutin: ({ icon, title, statText, costText, onComplete }) => {
+                const el = document.getElementById('scene-cutin');
+                const content = document.getElementById('cutin-content');
+                document.getElementById('cutin-icon').innerText = icon;
+                document.getElementById('cutin-title').innerText = title;
+                document.getElementById('cutin-stat').innerText = statText;
+                document.getElementById('cutin-cost').innerText = costText;
+                el.classList.remove('hidden');
+                content.classList.remove('cutin-anim');
+                void content.offsetWidth;
+                content.classList.add('cutin-anim');
+                setTimeout(() => {
+                    el.classList.add('hidden');
+                    if (onComplete) onComplete();
+                }, 2000);
+            },
+
+            showDraft: (type, mode = 'training') => {
+                const container = document.getElementById('draft-container');
+                const skipBtn = document.getElementById('draft-skip-container');
+                const title = document.getElementById('draft-title');
+                const subtitle = document.getElementById('draft-subtitle');
+                
+                container.innerHTML = '';
+                
+                const isUnderLimit = (c) => {
+                    if (!c.limit) return true;
+                    return Game.countCard(c.id) < c.limit;
+                };
+
+                const getCommons = () => CARDS_DB.filter(c => {
+                    if (c.rarity === 'rare') return false; 
+                    if (!isUnderLimit(c)) return false; 
+                    return c.attr === 'common' || c.attr === type;
+                });
+
+                if (mode === 'battle_reward') {
+                    skipBtn.classList.remove('hidden');
+                    title.innerText = "バトル報酬！";
+                    subtitle.innerText = "戦利品を選ぼう！(レアが出るかも？)";
+                    
+                    let commons = getCommons();
+                    let rares = CARDS_DB.filter(c => c.rarity === 'rare' && c.pool === type && isUnderLimit(c));
+                    
+                    let choices = [];
+                    for(let i=0; i<3; i++) {
+                        let isRare = Math.random() < 0.1; 
+                        let source = (isRare && rares.length > 0) ? rares : commons;
+                        let available = source.filter(c => !choices.find(ch => ch.id === c.id));
+                        if (available.length === 0) {
+                            source = (source === rares) ? commons : rares; 
+                            available = source.filter(c => !choices.find(ch => ch.id === c.id));
+                        }
+                        if (available.length > 0) {
+                            let pick = available[Math.floor(Math.random() * available.length)];
+                            choices.push(pick);
+                        }
+                    }
+                    UI.renderDraftCards(choices, container);
+
+                } else {
+                    skipBtn.classList.add('hidden');
+                    title.innerText = "カード獲得！";
+                    subtitle.innerText = "強化完了！1枚選んでデッキに追加";
+
+                    let candidates = getCommons();
+                    if(candidates.length < 3) candidates = [...candidates, ...CARDS_DB.filter(c=>c.id==='punch')];
+                    const choices = Game.shuffle([...new Set(candidates)]).slice(0, 3);
+                    UI.renderDraftCards(choices, container);
+                }
+
+                document.getElementById('scene-draft').classList.remove('hidden');
+            },
+
+            renderDraftCards: (cards, container) => {
+                cards.forEach(card => {
+                    const el = document.createElement('div');
+                    el.className = 'bg-white p-4 rounded-xl shadow-lg border-2 border-slate-200 flex flex-col items-center gap-2 cursor-pointer hover:border-yellow-400 transition transform hover:scale-105 active:scale-95 text-center h-full justify-between card-hover';
+                    if (card.rarity === 'rare') {
+                        el.className += ' border-yellow-300 ring-4 ring-yellow-100 bg-yellow-50';
+                    }
+                    el.onclick = () => Game.draftCard(card.id);
+                    
+                    let colorClass = card.type === 'phys' ? 'text-red-500 bg-red-100' : (card.type === 'mag' ? 'text-blue-500 bg-blue-100' : 'text-green-500 bg-green-100');
+                    if (card.rarity === 'rare') colorClass = 'text-yellow-600 bg-yellow-200';
+
+                    el.innerHTML = `
+                        <div class="w-16 h-16 rounded-2xl ${colorClass} flex items-center justify-center text-3xl shrink-0 border-4 border-white shadow-sm mb-2"><i class="fas ${card.icon || 'fa-star'}"></i></div>
+                        <div class="w-full">
+                            <div class="font-bold text-lg text-slate-800 mb-1 ${card.rarity==='rare' ? 'text-yellow-700':''}">${card.name}</div>
+                            <div class="flex gap-1 justify-center flex-wrap mb-2">
+                                ${card.rarity === 'rare' ? '<span class="bg-yellow-400 text-[10px] font-black px-2 py-0.5 rounded text-slate-900 shadow-sm">RARE</span>' : ''}
+                                ${card.add_action ? '<span class="bg-orange-400 text-[10px] font-black px-2 py-0.5 rounded text-white shadow-sm">連撃</span>' : ''}
+                                ${card.exhaust ? '<span class="bg-purple-600 text-[10px] font-black px-2 py-0.5 rounded text-white shadow-sm">1回</span>' : ''}
+                            </div>
+                            <div class="text-sm text-slate-500 leading-tight">${card.desc}</div>
+                        </div>
+                    `;
+                    container.appendChild(el);
+                });
+            },
+
+            updateShop: () => {
+                UI.updateHeader(); 
+                
+                const upList = document.getElementById('shop-upgrade-list');
+                upList.innerHTML = '';
+                State.deck.forEach(card => {
+                    if(!card.upgraded) {
+                        const div = document.createElement('div');
+                        div.className = 'flex justify-between items-center bg-slate-800 p-2 rounded text-sm text-white cursor-pointer hover:bg-slate-600';
+                        div.innerHTML = `<span><i class="fas ${card.icon}"></i> ${card.name}</span> <span class="text-xs bg-slate-900 px-2 rounded text-green-400">強化</span>`;
+                        div.onclick = () => Game.upgradeCard(card.uid);
+                        upList.appendChild(div);
+                    }
+                });
+
+                const rmList = document.getElementById('shop-remove-list');
+                rmList.innerHTML = '';
+                State.deck.forEach(card => {
+                    const div = document.createElement('div');
+                    div.className = 'flex justify-between items-center bg-slate-800 p-2 rounded text-sm text-white cursor-pointer hover:bg-slate-600';
+                    div.innerHTML = `<span><i class="fas ${card.icon}"></i> ${card.name}</span> <span class="text-xs bg-slate-900 px-2 rounded text-red-400">削除</span>`;
+                    div.onclick = () => Game.removeCard(card.uid);
+                    rmList.appendChild(div);
+                });
+
+                const buyList = document.getElementById('shop-buy-list');
+                if(buyList.children.length === 0) {
+                    buyList.innerHTML = '';
+                    let candidates = CARDS_DB.filter(c => c.rarity !== 'rare'); 
+                    let shopCards = Game.shuffle(candidates).slice(0, 3);
+                    shopCards.forEach(card => {
+                        const reachedLimit = card.limit && Game.countCard(card.id) >= card.limit;
+                        const opacity = reachedLimit ? 'opacity-50' : 'opacity-100';
+                        const pointer = reachedLimit ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-600';
+                        const btnText = reachedLimit ? '上限' : '購入';
+                        
+                        const div = document.createElement('div');
+                        div.className = `flex justify-between items-center bg-slate-800 p-2 rounded text-sm text-white ${pointer} ${opacity}`;
+                        div.innerHTML = `<span><i class="fas ${card.icon}"></i> ${card.name}</span> <span class="text-xs bg-slate-900 px-2 rounded text-blue-400">${btnText}</span>`;
+                        if (!reachedLimit) {
+                            div.onclick = () => Game.buyCard(card.id);
+                        }
+                        buyList.appendChild(div);
+                    });
+                }
+            },
+
+            updateBattle: () => {
+                if (State.battle.enemy) {
+                    const e = State.battle.enemy;
+                    document.getElementById('enemy-name').innerText = e.name;
+                    const hpPct = Math.max(0, (e.hp / e.maxHp) * 100);
+                    document.getElementById('enemy-hp-bar').style.width = `${hpPct}%`;
+                    document.getElementById('enemy-hp-text').innerText = `${e.hp}/${e.maxHp}`;
+                    document.getElementById('enemy-intent').innerHTML = `<i class="fas fa-sword"></i> <span>攻撃 ${e.baseAtk}</span>`;
+                }
+
+                document.getElementById('battle-player-hp').innerText = State.hp;
+                document.getElementById('battle-player-maxhp').innerText = State.maxHp;
+                
+                const apCont = document.getElementById('action-point-container');
+                apCont.innerHTML = '';
+                for(let i=0; i<State.battle.actionsLeft; i++) {
+                    apCont.innerHTML += `<div class="w-4 h-4 rounded-full bg-yellow-400 border border-white shadow-sm pop-anim"></div>`;
+                }
+                if(State.battle.actionsLeft === 0) apCont.innerHTML = `<span class="text-xs text-slate-400">0</span>`;
+
+                const blkEl = document.getElementById('battle-block');
+                if(State.battle.block > 0) {
+                    blkEl.classList.remove('hidden');
+                    document.getElementById('battle-block-val').innerText = State.battle.block;
+                } else {
+                    blkEl.classList.add('hidden');
+                }
+
+                document.getElementById('battle-deck-count').innerText = State.battle.drawPile.length;
+                document.getElementById('battle-discard-count').innerText = State.battle.discardPile.length;
+                document.getElementById('battle-exhaust-count').innerText = State.battle.exhaustPile.length;
+
+                const handCont = document.getElementById('hand-container');
+                handCont.innerHTML = '';
+                State.battle.hand.forEach((card, idx) => {
+                    const el = document.createElement('div');
+                    const canPlay = State.battle.actionsLeft > 0 && !State.battle.processing;
+                    const opacity = canPlay ? 'opacity-100' : 'opacity-50 grayscale';
+                    let typeColor = card.type === 'phys' ? 'bg-red-50 border-red-200' : (card.type === 'mag' ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200');
+                    if(card.type === 'skill') typeColor = 'bg-purple-50 border-purple-200';
+                    if(card.rarity === 'rare') typeColor = 'bg-yellow-50 border-yellow-300 ring-2 ring-yellow-200';
+
+                    el.className = `w-28 h-40 md:w-36 md:h-52 bg-white rounded-xl border-b-4 ${typeColor} shadow-xl flex flex-col p-2 relative cursor-pointer transition-all duration-200 transform hover:-translate-y-6 hover:scale-110 hover:z-50 active:scale-95 ${opacity} shrink-0`;
+                    
+                    if(canPlay) el.onclick = () => Game.playCard(idx);
+
+                    let badges = '';
+                    if(card.rarity === 'rare') badges += `<div class="bg-yellow-400 text-slate-900 px-1.5 rounded text-[10px] font-bold shadow-sm border border-white">RARE</div>`;
+                    if(card.add_action) badges += `<div class="bg-orange-400 text-white px-1.5 rounded text-[10px] font-bold shadow-sm border border-white">連撃</div>`;
+                    if(card.exhaust) badges += `<div class="bg-purple-600 text-white px-1.5 rounded text-[10px] font-bold shadow-sm border border-white">1回</div>`;
+
+                    el.innerHTML = `
+                        <div class="absolute -top-3 left-0 right-0 flex justify-center gap-1 z-10 flex-wrap px-1">${badges}</div>
+                        <div class="flex-1 flex flex-col items-center justify-center mt-2">
+                            <div class="text-3xl md:text-4xl mb-2 drop-shadow-sm transition-transform duration-200 group-hover:scale-110 ${card.rarity==='rare' ? 'text-yellow-600' : (card.type==='phys'?'text-red-400':(card.type==='mag'?'text-blue-400':'text-green-400'))}"><i class="fas ${card.icon}"></i></div>
+                            <div class="font-bold text-center text-xs md:text-sm leading-tight mb-2 ${card.rarity==='rare'?'text-yellow-800':'text-slate-800'}">${card.name}</div>
+                            <p class="text-[10px] md:text-xs text-center text-slate-500 leading-tight px-1">${card.desc}</p>
+                        </div>
+                    `;
+                    handCont.appendChild(el);
+                });
+            },
+
+            toast: (msg) => {
+                const el = document.getElementById('toast');
+                el.innerText = msg;
+                el.style.opacity = 1;
+                el.style.top = '120px';
+                setTimeout(() => {
+                    el.style.opacity = 0;
+                    el.style.top = '100px';
+                }, 2000);
+            },
+            
+            animPop: (selector) => {
+                const el = document.querySelector(selector);
+                if(el) {
+                    el.classList.remove('pop-anim');
+                    void el.offsetWidth;
+                    el.classList.add('pop-anim');
+                }
+            },
+            
+            animShake: (selector) => {
+                const el = document.querySelector(selector);
+                if(el) {
+                    el.classList.remove('shake-anim');
+                    void el.offsetWidth;
+                    el.classList.add('shake-anim');
+                }
+            }
+        };
+
+        Game.selectType('hp');
+    </script>
+</body>
+</html>
