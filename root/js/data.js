@@ -32,7 +32,7 @@ export const CARDS_DB = [
     { id: 'quick_think', name: '思考加速', type: 'skill', attr: 'common', add_action: true, draw: 2, exhaust: true, limit: 2, desc: '2枚引いて行動権+1。[1回のみ/デッキ2枚まで]', icon: 'fa-brain' },
     { id: 'prepare', name: '仕込み', type: 'skill', attr: 'common', effect: 'next_draw', val: 2, desc: '次のターン開始時に2枚多く引く。', icon: 'fa-toolbox' },
     { id: 'meditate', name: '瞑想', type: 'skill', attr: 'common', effect: 'action_up', val: 1, add_action: true, desc: '次のターン行動回数+1。続けて行動可。', icon: 'fa-om' },
-    { id: 'cheer', name: '声援', type: 'buff', attr: 'common', effect: 'str_up', val: 1, add_action: true, draw: 1, exhaust: true, limit: 2, desc: 'この戦闘中、攻撃+1。1枚引く。続けて行動。[1回のみ]', icon: 'fa-bullhorn' },
+    { id: 'cheer', name: '声援', type: 'buff', attr: 'common', effect: 'str_up', val: 1, add_action: true, exhaust: true, limit: 1, desc: 'この戦闘中、攻撃+1。続けて行動。[1回のみ/デッキ1枚まで]', icon: 'fa-bullhorn' },
     { id: 'focus', name: '集中', type: 'buff', attr: 'common', effect: 'both_up', val: 1, add_action: true, exhaust: true, limit: 2, desc: 'この戦闘中、攻撃・魔力+1。続けて行動。[1回のみ]', icon: 'fa-crosshairs' },
     { id: 'recycle', name: '再構築', type: 'skill', attr: 'common', effect: 'recycle', draw: 2, exhaust: true, limit: 1, desc: '捨て札を山札に戻し、2枚引く。[デッキ1枚まで]', icon: 'fa-recycle' },
     { id: 'tackle', name: 'タックル', type: 'phys', attr: 'str', val: 0.5, extra: 'hp_scale', desc: '攻撃50% + 現在HPの10%ダメージ。', icon: 'fa-football-ball' },
@@ -97,3 +97,25 @@ export const CARDS_DB = [
     { id: 'causal_reverse', name: '因果反転', type: 'def', attr: 'int', val: 0, extra: 'intent_block', exhaust: true, rarity: 'rare', pool: 'int', limit: 1, desc: '予告ダメージ分をブロック。防いだ値を最大30まで次の魔法へ変換。[1回のみ]', icon: 'fa-yin-yang' },
     { id: 'revenge_fortress', name: '報復要塞', type: 'def', attr: 'hp', val: 0, extra: 'revenge_guard', exhaust: true, rarity: 'rare', pool: 'hp', limit: 1, desc: '予告値＋失ったHP20%をブロック。次の攻撃で防いだ値を反射。[1回のみ]', icon: 'fa-chess-rook' },
 ];
+
+// Every card is deliberately assigned a secret modification that complements
+// its role. Keeping this table explicit prevents generic upgrades from creating
+// accidental infinite loops (notably draw + action cards such as quick_think).
+const SECRET_MOD_GROUPS = {
+    rupture: ['punch','kick','tackle','life_burn','draw_slash','finisher','guard_break','quick','feint','life_share','body_press','dragon_fist','blood_sucker','masters_read'],
+    combo_mastery: ['multi','flurry','infinite_blades'],
+    rebirth: ['heavy','fireball','meteor','grand_slam','castle_gate'],
+    resonance: ['spark','thunder','overload','mana_burst','absolute_zero'],
+    kindle: ['frost','scorch','black_hole'],
+    anchor: ['defend','barrier','counter','endure','fortify','iron_will','absolute_barrier','causal_reverse','revenge_fortress'],
+    thornward: ['arcane_shield','spikes','aegis','shield_bash'],
+    overflow: ['bandage','rest','second_wind'],
+    renewal: ['super_heal','vitality'],
+    serenity: ['quick_think','cheer','focus','rage','mana_charge','muscle','god_strength','titan_body','berserker','echo_spell','immortal','limit_break','world_tree'],
+    insight: ['meditate','time_warp'],
+    tempo: ['prepare','recycle','grimoire','future_sight']
+};
+
+export const SECRET_MOD_BY_CARD = Object.fromEntries(
+    Object.entries(SECRET_MOD_GROUPS).flatMap(([mod,ids]) => ids.map(id => [id,mod]))
+);

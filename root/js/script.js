@@ -1,4 +1,4 @@
-import { CONSTANTS, ACTION_DATA, CARDS_DB, HIRAGANA } from './data.js';
+import { CONSTANTS, ACTION_DATA, CARDS_DB, HIRAGANA, SECRET_MOD_BY_CARD } from './data.js';
 
 const META_UPGRADES = {
     vitality: { name:'生命の殻', icon:'fa-heart', color:'text-green-300', desc:'初期最大HP +5', max:5 },
@@ -48,7 +48,12 @@ const SECRET_MODS = {
     overflow: { name:'生命変換', icon:'fa-heart-circle-plus', desc:'最大HPを超えた回復量をブロックへ変換する。' },
     anchor: { name:'不動結界', icon:'fa-anchor', desc:'このカードで得たブロックを次ターンへ持ち越す。' },
     insight: { name:'先読み術式', icon:'fa-eye', desc:'使用時、さらにカードを1枚引く。' },
-    tempo: { name:'無拍子', icon:'fa-forward-fast', desc:'使用時、行動権を1回復する。' }
+    tempo: { name:'無拍子', icon:'fa-forward-fast', desc:'使用時、行動権を1回復する。' },
+    serenity: { name:'静心の守り', icon:'fa-spa', desc:'使用時、ブロック6を得る。循環効果は増やさない。' },
+    combo_mastery: { name:'連撃奥義', icon:'fa-link', desc:'多段攻撃のヒット数だけ、さらにコンボを加算する。' },
+    kindle: { name:'追炎術式', icon:'fa-fire-flame-curved', desc:'使用時、敵へ炎上3を追加する。' },
+    thornward: { name:'反攻装甲', icon:'fa-shield-halved', desc:'使用時、この戦闘中の反撃を2得る。' },
+    renewal: { name:'再生循環', icon:'fa-seedling', desc:'使用時、カードを1枚引く。' }
 };
 
 // --- 状態管理 (State) ---
@@ -90,6 +95,14 @@ const RunStorage = {
             State.meta = Meta.load();
             State.selectedAction = null;
             State.isTransitioning = false;
+            const migrateCard = card => {
+                if (!card?.id) return;
+                if (card.id === 'cheer') { delete card.draw; card.limit = 1; }
+                if (card.secretMod) card.secretMod = SECRET_MOD_BY_CARD[card.id] || 'serenity';
+                if (card.secretMod || card.id === 'cheer') card.desc = Game.describeCard(card);
+            };
+            State.deck.forEach(migrateCard);
+            ['hand','drawPile','discardPile','exhaustPile'].forEach(key => (State.battle[key] || []).forEach(migrateCard));
             return true;
         } catch (_) {
             localStorage.removeItem(RUN_SAVE_KEY);
@@ -199,7 +212,7 @@ const Game = {
         if (State.playerType === 'hp') { 
             State.maxHp = 60; State.hp = 60; 
             Game.addCard('bandage'); Game.addCard('tackle'); 
-            trait = "特性: 自然治癒・肉壁"; avatar = '🐻';
+            trait = "特性: 生命の殻・自然治癒"; avatar = '🐻';
         } else if (State.playerType === 'str') { 
             State.str = 8; 
             Game.addCard('kick'); Game.addCard('rage'); 
@@ -207,7 +220,7 @@ const Game = {
         } else if (State.playerType === 'int') { 
             State.int = 8; 
             Game.addCard('spark'); Game.addCard('barrier'); 
-            trait = "特性: 魔力循環"; avatar = '🦉';
+            trait = "特性: 詠唱蓄積・魔力循環"; avatar = '🦉';
         }
         State.avatar = avatar;
         const inheritedHp = State.meta.upgrades.vitality * 5;
@@ -448,6 +461,12 @@ const Game = {
         State.battle.damageThisTurn = 0;
         State.battle.lastCardType = null;
         State.battle.spellChain = 0;
+        if (State.playerType === 'hp' && State.battle.turnCount === 0) {
+            const shell = Math.max(6,Math.floor(State.maxHp * .1));
+            State.battle.block += shell;
+            UI.toast(`【特性】生命の殻 ブロック+${shell}`);
+        }
+        if (State.playerType === 'int') State.battle.magBonus += 2;
         
         const drawCount = CONSTANTS.DRAW_COUNT + State.battle.drawNextTurn;
         State.battle.drawNextTurn = 0; 
@@ -587,8 +606,8 @@ const Game = {
         let str = State.str + State.battle.playerTempStr;
         let int = State.int + State.battle.playerTempInt;
         const isDamageCard = card.type === 'phys' || card.type === 'mag';
+        const comboBefore = State.battle.combo;
         if (isDamageCard) {
-            State.battle.combo++;
             State.battle.cardsPlayed++;
             if (card.type === 'mag') State.battle.spellChain = State.battle.lastCardType === 'mag' ? State.battle.spellChain + 1 : 0;
             else State.battle.spellChain = 0;
@@ -596,8 +615,7 @@ const Game = {
         }
 
         if (card.type === 'phys') {
-            const comboMultiplier = 1 + Math.min(5, Math.max(0, State.battle.combo - 1)) * 0.1;
-            let dmg = Math.floor(str * card.val * comboMultiplier);
+            let dmg = Math.floor(str * card.val);
             if (card.extra === 'hp_scale') dmg += Math.floor(State.hp * 0.1);
             if (card.extra === 'hp_dmg') dmg = State.hp;
             if (card.extra === 'hp_dmg_half') dmg = Math.floor(State.hp * (card.scale || .5));
@@ -621,10 +639,15 @@ const Game = {
             }
             let totalDealt = 0;
             if (card.hits) {
-                for(let k=0; k<card.hits; k++) totalDealt += Game.dealDamage(dmg, { kind:'phys', delay:k * 75, critical: (card.rarity === 'rare' && k === card.hits-1) || dmg >= State.battle.enemy.maxHp * .25 });
+                for(let k=0; k<card.hits; k++) {
+                    const hitDmg = Math.floor(dmg * (1 + Math.min(5,comboBefore + k) * .1));
+                    totalDealt += Game.dealDamage(hitDmg, { kind:'phys', delay:k * 75, critical: (card.rarity === 'rare' && k === card.hits-1) || hitDmg >= State.battle.enemy.maxHp * .25 });
+                }
             } else {
+                dmg = Math.floor(dmg * (1 + Math.min(5,comboBefore) * .1));
                 totalDealt = Game.dealDamage(dmg, { kind:'phys', critical: card.rarity === 'rare' || card.extra === 'execute' });
             }
+            State.battle.combo = comboBefore + (card.hits || 1);
             if (card.extra === 'drain') {
                 const drainAmt = Math.min(State.maxHp - State.hp, Math.floor(totalDealt * 0.5));
                 State.hp += drainAmt;
@@ -643,6 +666,7 @@ const Game = {
             if (State.battle.echo) { Game.dealDamage(dmg, { kind:'mag', delay:120, critical:true }); State.battle.echo = false; UI.toast(`残響！ ${dmg}追加ダメージ`); }
             if (card.self_dmg) { State.hp -= card.self_dmg; UI.combatNumber(card.self_dmg, 'hurt', 'player-battle-avatar'); UI.animShake('#game-container'); UI.toast(`反動 ${card.self_dmg} ダメージ`); }
             if (card.secretMod === 'resonance') { State.battle.magBonus += 4; UI.toast('【秘伝】次の魔法ダメージ+4'); }
+            State.battle.combo = comboBefore + 1;
         } else if (card.type === 'heal') {
             let heal = card.val;
             if (card.extra === 'low_hp_double' && State.hp <= State.maxHp / 2) heal *= 2;
@@ -731,10 +755,15 @@ const Game = {
         if (card.add_action) State.battle.actionsLeft++;
         if (card.secretMod === 'insight') Game.drawCards(1);
         if (card.secretMod === 'tempo') State.battle.actionsLeft++;
+        if (card.secretMod === 'serenity') State.battle.block += 6;
+        if (card.secretMod === 'combo_mastery') State.battle.combo += card.hits || 1;
+        if (card.secretMod === 'kindle') State.battle.enemyBurn += 3;
+        if (card.secretMod === 'thornward') State.battle.thorns += 2;
+        if (card.secretMod === 'renewal') Game.drawCards(1);
 
         let recycle = false;
         if (!card.exhaust && State.playerType === 'int' && (card.type === 'mag' || card.attr === 'int')) {
-            if (Math.random() < 0.2) {
+            if (Math.random() < 0.3) {
                 recycle = true;
                 UI.toast("【特性】魔力循環！");
             }
@@ -797,8 +826,7 @@ const Game = {
         const str = State.str + State.battle.playerTempStr;
         const int = State.int + State.battle.playerTempInt;
         if (card.type === 'phys') {
-            const comboMultiplier = 1 + Math.min(5, State.battle.combo) * .1;
-            let amount = Math.floor(str * card.val * comboMultiplier);
+            let amount = Math.floor(str * card.val);
             if (card.extra === 'hp_scale') amount += Math.floor(State.hp * .1);
             if (card.extra === 'hp_dmg_half') amount = Math.floor(State.hp * (card.scale || .5));
             if (card.extra === 'block_dmg') amount = Math.floor(State.battle.block * (card.extraMult || 1));
@@ -807,9 +835,17 @@ const Game = {
             if (card.extra === 'execute' && State.battle.enemy.hp <= State.battle.enemy.maxHp * .3) amount *= 2;
             if (card.extra === 'intent_counter' && ['heavy','drain'].includes(State.battle.enemy.intent)) amount *= 2;
             const hits = card.hits || 1;
-            const vulnerableBonus = State.battle.enemyVulnerable > 0 ? Math.floor(amount * .5) : 0;
-            const total = Math.max(0, amount * hits + vulnerableBonus - (State.battle.enemy.block || 0));
-            return `${card.hits ? `${amount}×${card.hits} → ` : ''}予測 ${total} DMG`;
+            let enemyBlock = State.battle.enemy.block || 0;
+            let vulnerable = State.battle.enemyVulnerable > 0;
+            const hitAmounts = [];
+            let total = 0;
+            for (let k=0;k<hits;k++) {
+                let hit = Math.floor(amount * (1 + Math.min(5,State.battle.combo + k) * .1));
+                if (vulnerable) { hit = Math.floor(hit * 1.5); vulnerable = false; }
+                const absorbed = Math.min(enemyBlock,hit); enemyBlock -= absorbed; hit -= absorbed;
+                hitAmounts.push(hit); total += hit;
+            }
+            return `${card.hits ? `${hitAmounts.join('+')} → ` : ''}予測 ${total} DMG`;
         }
         if (card.type === 'mag') {
             let amount = Math.floor(int * card.val) + State.battle.magBonus + (State.battle.lastCardType === 'mag' ? (State.battle.spellChain + 1) * 2 : 0);
@@ -958,7 +994,7 @@ const Game = {
 
         if (State.playerType === 'hp') {
             // 体力型: 安定した自然治癒。長期戦で強いが、完全な無限耐久にはしない。
-            let regen = Math.min(8, Math.max(3, Math.floor(State.maxHp * 0.05)));
+            let regen = Math.min(10, Math.max(4, Math.floor(State.maxHp * 0.06)));
             if(State.hp < State.maxHp) {
                 State.hp = Math.min(State.maxHp, State.hp + regen);
                 UI.toast(`【特性】自然治癒 +${regen}`);
@@ -1114,13 +1150,7 @@ const Game = {
     },
 
     getSecretMod: (card) => {
-        if (card.exhaust) return 'rebirth';
-        if (card.type === 'heal') return 'overflow';
-        if (card.type === 'def') return 'anchor';
-        if (card.type === 'phys') return 'rupture';
-        if (card.type === 'mag') return 'resonance';
-        if (card.draw || card.effect === 'next_draw') return 'insight';
-        return 'tempo';
+        return SECRET_MOD_BY_CARD[card.id] || 'serenity';
     },
     visitSecretMode: () => {
         State.hp = Math.min(State.maxHp, State.hp + 12);
@@ -1315,7 +1345,7 @@ const UI = {
     },
     resumeSavedRun: () => {
         const avatar = State.avatar || (State.playerType === 'hp' ? '🛡️' : State.playerType === 'str' ? '🔥' : '🔮');
-        const traits = { hp:'特性: 自然治癒・肉壁', str:'特性: 先手必勝', int:'特性: 魔力循環' };
+        const traits = { hp:'特性: 生命の殻・自然治癒', str:'特性: 先手必勝', int:'特性: 詠唱蓄積・魔力循環' };
         document.getElementById('char-avatar').innerText = avatar;
         document.getElementById('player-battle-avatar').innerText = avatar;
         document.getElementById('trait-display').innerText = traits[State.playerType] || '特性: なし';
