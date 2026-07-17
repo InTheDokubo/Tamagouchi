@@ -1,0 +1,10 @@
+{
+  "name": "育成っちバトル",
+  "short_name": "育成っち",
+  "description": "育成とデッキ構築を楽しむローグライトカードバトル",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1e293b",
+  "theme_color": "#1e293b",
+  "orientation": "any"
+}

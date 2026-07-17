@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1e293b">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <title>育成っちバトル！</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root { --app-height: 100dvh; --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); --header-height: 56px; }
+        html, body { width:100%; height:var(--app-height); overscroll-behavior:none; }
+        body { font-family: 'M PLUS Rounded 1c', sans-serif; background-color: #1e293b; overflow: hidden; touch-action: manipulation; margin: 0; padding: 0; position: fixed; inset: 0; }
+        #game-container { height:var(--app-height)!important; }
+        #header-panel { height:calc(var(--header-height) + var(--safe-top))!important; padding-top:calc(.5rem + var(--safe-top)); }
+        #scene-training, #scene-shop, #scene-battle, #scene-event { top:calc(var(--header-height) + var(--safe-top))!important; }
+        .text-outline { text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
+        @keyframes shake { 0% { transform: translate(1px, 1px) rotate(0deg); } 10% { transform: translate(-1px, -2px) rotate(-1deg); } 30% { transform: translate(3px, 2px) rotate(0deg); } 50% { transform: translate(-1px, 2px) rotate(-1deg); } 70% { transform: translate(3px, 1px) rotate(-1deg); } 90% { transform: translate(1px, 2px) rotate(0deg); } 100% { transform: translate(1px, -2px) rotate(-1deg); } }
+        .shake-anim { animation: shake 0.4s; }
+        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }
+        .pop-anim { animation: pop 0.3s ease-out; }
+        @keyframes slideInUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .slide-in { animation: slideInUp 0.4s ease-out forwards; }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-5px); } 100% { transform: translateY(0px); } }
+        .float-anim { animation: float 3s ease-in-out infinite; }
+        .btn-content-enter { animation: fadeInScale 0.2s ease-out forwards; }
+        @keyframes fadeInScale { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        
+        /* Cut-in Animations */
+        @keyframes bandExpand { 0% { transform: scaleY(0); opacity: 0; } 10% { transform: scaleY(0.01); opacity: 1; } 30% { transform: scaleY(1); opacity: 1; } 85% { transform: scaleY(1); opacity: 1; } 95% { transform: scaleY(0.01); opacity: 1; } 100% { transform: scaleY(0); opacity: 0; } }
+        @keyframes textReveal { 0% { opacity: 0; transform: scale(0.9) translateY(10px); } 30% { opacity: 0; transform: scale(0.9) translateY(10px); } 40% { opacity: 1; transform: scale(1.1) translateY(0); } 45% { transform: scale(1); } 80% { opacity: 1; transform: scale(1); } 90% { opacity: 0; transform: scale(1.1); } 100% { opacity: 0; } }
+        .anim-band { animation: bandExpand 1.05s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .anim-text { animation: textReveal 1.05s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .trait-badge { background: linear-gradient(135deg, #ffd700, #ffaa00); color: #4a3b00; text-shadow: 0 1px 0 rgba(255,255,255,0.5); }
+        .custom-scroll { -webkit-overflow-scrolling: touch; touch-action:pan-y; }
+        .hand-overlap > div { margin-left: var(--hand-overlap, -25px); transition: transform 0.2s cubic-bezier(0.33, 1, 0.68, 1), margin 0.2s; }
+        @media (min-width: 768px) { :root{--header-height:64px}.hand-overlap > div { margin-left: var(--hand-overlap, -35px); } }
+        .hand-overlap > div:first-child { margin-left: 0; }
+        .card-selected { transform: translateY(-30px) scale(1.1) !important; z-index: 100 !important; margin-left: 15px !important; margin-right: 15px !important; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important; border-color: #f59e0b !important; }
+        .card-using-anim { position: fixed !important; z-index: 9999 !important; pointer-events:none !important; margin:0 !important; will-change:left,top,transform,opacity; }
+        .effect-popup { position: absolute; font-weight: 900; font-size: 2rem; color: #fff; text-shadow: 2px 2px 0 #000; pointer-events: none; z-index: 200; animation: popupMove 0.8s ease-out forwards; }
+        @media (min-width: 768px) { .effect-popup { font-size: 4rem; } }
+        @keyframes popupMove { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 20% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; } 100% { transform: translate(-50%, -150%) scale(1); opacity: 0; } }
+
+        /* Battle juice: lightweight, code-native effects */
+        #scene-battle { --arena-accent: #8b5cf6; isolation: isolate; }
+        .battle-sky { background: radial-gradient(circle at 50% 20%, rgba(255,255,255,.9), transparent 32%), linear-gradient(180deg, #cbd5e1 0%, #e2e8f0 57%, #cbd5e1 58%, #94a3b8 100%); }
+        .battle-sky::before { content:""; position:absolute; inset:0; opacity:.22; background-image: radial-gradient(circle, #fff 0 2px, transparent 3px); background-size:48px 48px; animation: arenaDrift 18s linear infinite; }
+        .arena-floor { position:absolute; left:-10%; right:-10%; top:58%; bottom:-20%; border-radius:50% 50% 0 0; background:radial-gradient(ellipse at center top, rgba(255,255,255,.8), rgba(100,116,139,.32) 60%, rgba(30,41,59,.45)); transform:perspective(500px) rotateX(58deg); transform-origin:top; }
+        @keyframes arenaDrift { to { background-position:48px 24px; } }
+        .enemy-shell { position:relative; display:grid; place-items:center; }
+        .enemy-aura { position:absolute; width:110%; aspect-ratio:1; border-radius:50%; background:radial-gradient(circle, color-mix(in srgb, var(--arena-accent) 32%, transparent), transparent 68%); filter:blur(8px); animation:auraPulse 2.4s ease-in-out infinite; }
+        .enemy-ring { position:absolute; width:94%; aspect-ratio:1; border:2px solid color-mix(in srgb, var(--arena-accent) 45%, white); border-radius:50%; opacity:.5; animation:ringSpin 9s linear infinite; }
+        .enemy-ring::before, .enemy-ring::after { content:"✦"; position:absolute; color:var(--arena-accent); font-size:12px; }
+        .enemy-ring::before { top:-8px; left:48%; } .enemy-ring::after { bottom:-8px; left:48%; }
+        #enemy-sprite { position:relative; z-index:2; animation:enemyIdle 2.5s ease-in-out infinite; transform-origin:center bottom; will-change:transform; }
+        #enemy-sprite.boss-sprite { filter:drop-shadow(0 0 16px #f59e0b); }
+        @keyframes enemyIdle { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-7px) scale(1.025)} }
+        @keyframes auraPulse { 0%,100%{transform:scale(.9);opacity:.5} 50%{transform:scale(1.12);opacity:.95} }
+        @keyframes ringSpin { to{transform:rotate(360deg)} }
+        .enemy-hit { animation:enemyHit .28s cubic-bezier(.2,.8,.2,1) !important; }
+        .enemy-hit-heavy { animation:enemyHitHeavy .42s cubic-bezier(.2,.8,.2,1) !important; }
+        @keyframes enemyHit { 0%{transform:translateX(0) scale(1)} 25%{transform:translateX(13px) scale(.9,1.1);filter:brightness(2)} 60%{transform:translateX(-7px) rotate(-5deg)} 100%{transform:translateX(0) scale(1)} }
+        @keyframes enemyHitHeavy { 0%{transform:scale(1)} 18%{transform:translateX(26px) rotate(9deg) scale(.78,1.18);filter:brightness(3)} 48%{transform:translateX(-15px) rotate(-8deg)} 72%{transform:translateX(8px)} 100%{transform:scale(1)} }
+        .player-battle-avatar { animation:playerReady 1.8s ease-in-out infinite; filter:drop-shadow(0 8px 8px rgba(15,23,42,.28)); }
+        .player-attack { animation:playerAttack .36s ease-out !important; }
+        .player-hurt { animation:playerHurt .4s ease-out !important; }
+        @keyframes playerReady { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-4px) rotate(2deg)} }
+        @keyframes playerAttack { 0%{transform:translate(0) scale(1)} 45%{transform:translate(42px,-18px) scale(1.22) rotate(10deg)} 100%{transform:translate(0) scale(1)} }
+        @keyframes playerHurt { 20%{transform:translateX(-18px) rotate(-10deg);filter:brightness(2) saturate(.3)} 50%{transform:translateX(8px)} }
+        .battle-flash { position:absolute; inset:0; z-index:80; pointer-events:none; opacity:0; mix-blend-mode:screen; }
+        .flash-phys { animation:screenFlash .22s ease-out; background:#fb7185; }
+        .flash-mag { animation:screenFlash .28s ease-out; background:#818cf8; }
+        .flash-rare { animation:rareFlash .5s ease-out; background:linear-gradient(120deg,#fef3c7,#f59e0b,#fff); }
+        .flash-hurt { animation:screenFlash .3s ease-out; background:#ef4444; mix-blend-mode:multiply; }
+        @keyframes screenFlash { 0%{opacity:0} 18%{opacity:.45} 100%{opacity:0} }
+        @keyframes rareFlash { 0%{opacity:0} 20%{opacity:.72} 100%{opacity:0} }
+        #battle-fx-layer { position:absolute; inset:0; z-index:75; pointer-events:none; overflow:hidden; }
+        .damage-number { position:absolute; font-weight:900; font-size:clamp(28px,6vw,58px); color:#fff; -webkit-text-stroke:2px #1e293b; text-shadow:0 5px 0 rgba(15,23,42,.28); transform:translate(-50%,-50%); animation:damageRise .72s cubic-bezier(.16,1,.3,1) forwards; }
+        .damage-number.critical { color:#fde047; font-size:clamp(38px,8vw,76px); -webkit-text-stroke-color:#9a3412; }
+        .damage-number.heal { color:#4ade80; -webkit-text-stroke-color:#166534; }
+        .damage-number.block { color:#60a5fa; -webkit-text-stroke-color:#1e3a8a; }
+        .damage-number.hurt { color:#fb7185; -webkit-text-stroke-color:#7f1d1d; }
+        @keyframes damageRise { 0%{opacity:0;transform:translate(-50%,-20%) scale(.25) rotate(-8deg)} 22%{opacity:1;transform:translate(-50%,-50%) scale(1.25) rotate(3deg)} 65%{transform:translate(-50%,-95%) scale(1)} 100%{opacity:0;transform:translate(-50%,-150%) scale(.9)} }
+        .fx-particle { position:absolute; width:10px; height:10px; border-radius:2px; background:var(--particle,#fbbf24); left:var(--x); top:var(--y); box-shadow:0 0 10px var(--particle); animation:particleFly .58s ease-out forwards; }
+        @keyframes particleFly { to{ transform:translate(var(--dx),var(--dy)) rotate(300deg) scale(0); opacity:0; } }
+        .slash-fx { position:absolute; width:180px; height:12px; border-radius:100%; background:linear-gradient(90deg,transparent,#fff 30%,#fb7185 65%,transparent); filter:drop-shadow(0 0 8px #ef4444); transform:translate(-50%,-50%) rotate(-18deg) scaleX(0); animation:slash .3s ease-out forwards; }
+        .magic-fx { position:absolute; width:120px; aspect-ratio:1; border:5px double #c4b5fd; border-radius:50%; transform:translate(-50%,-50%) scale(.15) rotate(0); box-shadow:0 0 24px #7c3aed,inset 0 0 22px #818cf8; animation:magicBurst .48s ease-out forwards; }
+        @keyframes slash { 45%{transform:translate(-50%,-50%) rotate(-18deg) scaleX(1.3);opacity:1} 100%{transform:translate(-50%,-50%) rotate(-18deg) scaleX(1.7);opacity:0} }
+        @keyframes magicBurst { 65%{transform:translate(-50%,-50%) scale(1.25) rotate(180deg);opacity:1} 100%{transform:translate(-50%,-50%) scale(1.5) rotate(240deg);opacity:0} }
+        .combo-panel { opacity:0; transform:translateY(-8px) scale(.8); transition:.25s cubic-bezier(.16,1,.3,1); }
+        .combo-panel.active { opacity:1; transform:translateY(0) scale(1); }
+        .combo-bump { animation:comboBump .25s ease-out; }
+        @keyframes comboBump { 50%{transform:scale(1.35) rotate(-4deg)} }
+        .status-chip { display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border-radius:999px; font-size:9px; line-height:1; font-weight:900; box-shadow:0 2px 5px rgba(15,23,42,.18); white-space:nowrap; }
+        .hp-bar-shine { position:absolute; inset:0; transform:translateX(-110%); background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent); animation:barShine 1.8s linear infinite; }
+        @keyframes barShine { to{transform:translateX(110%)} }
+        .card-face { overflow:hidden; transform-origin:center bottom; }
+        .card-face::after { content:""; position:absolute; inset:0; pointer-events:none; opacity:0; background:linear-gradient(115deg,transparent 25%,rgba(255,255,255,.7) 42%,transparent 58%); transform:translateX(-110%); }
+        .card-face:hover::after, .card-selected::after { opacity:1; animation:cardShine .65s ease-out; }
+        @keyframes cardShine { to{transform:translateX(110%)} }
+        .rare-card { border-color:#fbbf24 !important; background:linear-gradient(145deg,#fffbeb 0%,#fef3c7 35%,#fff 55%,#fde68a 100%) !important; box-shadow:0 0 0 2px rgba(251,191,36,.35),0 14px 30px rgba(180,83,9,.28) !important; }
+        .rare-card::before { content:""; position:absolute; inset:-70%; opacity:0; background:conic-gradient(from 0deg,transparent,#fff7,transparent 25%); animation:foilSpin 4s linear infinite paused; pointer-events:none; }
+        .rare-card.card-selected::before, .draft-reveal.rare-card::before { opacity:1; animation-play-state:running; }
+        @keyframes foilSpin { to{transform:rotate(360deg)} }
+        .draft-reveal { opacity:0; animation:draftReveal .42s cubic-bezier(.16,1,.3,1) forwards; animation-delay:var(--delay,0ms); }
+        @keyframes draftReveal { 0%{opacity:0;transform:translateY(35px) rotateY(55deg) scale(.85)} 70%{opacity:1;transform:translateY(-5px) rotateY(0) scale(1.04)} 100%{opacity:1;transform:none} }
+        .victory-burst { animation:victoryBurst .75s cubic-bezier(.16,1,.3,1) forwards !important; }
+        @keyframes victoryBurst { 25%{transform:scale(1.45) rotate(-10deg);filter:brightness(2)} 65%{transform:scale(.8) rotate(14deg);opacity:.8} 100%{transform:scale(0) rotate(30deg);opacity:0} }
+        @media (min-width:768px) { .status-chip{font-size:11px;padding:4px 8px}.slash-fx{width:300px}.magic-fx{width:180px} }
+        @media (prefers-reduced-motion: reduce) { *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}.battle-sky::before{display:none} }
+        @media (max-height:600px) { .enemy-shell{width:64px!important;height:64px!important}.enemy-shell #enemy-sprite{font-size:3.5rem!important}.card-selected{transform:translateY(-18px) scale(1.06)!important}#hand-container>div{height:7.4rem}.player-battle-avatar{font-size:2.7rem!important} }
+        @media (max-height:600px) and (min-width:600px) { #scene-training{flex-direction:row!important}#scene-training>div{width:50%!important;height:100%!important}#scene-training .float-anim{animation:none!important}#char-avatar{font-size:3.5rem!important} }
+        html[data-layout^="portrait"] #scene-training { flex-direction:column!important; overflow-y:auto; }
+        html[data-layout^="portrait"] #training-hero { flex:0 0 auto; min-height:0; padding:.65rem; overflow:visible; }
+        html[data-layout^="portrait"] #training-hero .relative.w-24 { width:4.75rem; height:4.75rem; margin-bottom:.55rem; }
+        html[data-layout^="portrait"] #training-stats { padding:.65rem; max-width:22rem; }
+        html[data-layout^="portrait"] #training-stats .mb-4 { margin-bottom:.35rem; }
+        html[data-layout^="portrait"] #training-stats .grid { padding-top:.45rem; gap:.5rem; }
+        html[data-layout^="portrait"] #training-actions { padding:.65rem .75rem calc(.75rem + var(--safe-bottom)); justify-content:flex-start; }
+        html[data-layout^="portrait"] #daily-event-card { margin-bottom:.4rem; }
+        html[data-layout^="portrait"] #scene-battle .enemy-area { height:43%; padding-top:.2rem; }
+        html[data-layout^="portrait"] #scene-battle .enemy-shell { width:4.6rem!important; height:4.6rem!important; margin-bottom:0; }
+        html[data-layout^="portrait"] #scene-battle #enemy-sprite { font-size:4rem!important; }
+        html[data-layout^="portrait"] #player-panel { top:47%; left:.5rem; width:7.5rem; gap:.3rem; }
+        html[data-layout^="portrait"] #player-battle-avatar { top:46%; right:1.25rem; font-size:3.1rem; }
+        html[data-layout^="portrait"] #battle-hand-area { height:36%; padding-bottom:calc(.6rem + var(--safe-bottom)); }
+        html[data-layout^="portrait"] #hand-container > div { width:5.25rem; height:7.35rem; }
+        html[data-layout="portrait-compact"] #scene-battle .enemy-area { height:40%; }
+        html[data-layout="portrait-compact"] #scene-battle .enemy-shell { width:3.8rem!important; height:3.8rem!important; }
+        html[data-layout="portrait-compact"] #scene-battle #enemy-sprite { font-size:3.3rem!important; }
+        html[data-layout="portrait-compact"] #player-panel { top:43%; transform:none; }
+        html[data-layout="portrait-compact"] #player-battle-avatar { top:43%; }
+        html[data-layout="portrait-compact"] #battle-hand-area { height:34%; }
+        html[data-layout^="portrait"] #scene-shop { padding-bottom:calc(1rem + var(--safe-bottom)); }
+        .hitstop-freeze, .hitstop-freeze * { animation-play-state:paused!important; }
+        .card-consume-ring { position:fixed; z-index:9998; width:28px; height:28px; border:5px solid var(--consume-color,#fbbf24); border-radius:50%; pointer-events:none; transform:translate(-50%,-50%) scale(.2); box-shadow:0 0 20px var(--consume-color); animation:consumeRing .34s ease-out forwards; }
+        @keyframes consumeRing { 65%{opacity:1;transform:translate(-50%,-50%) scale(2.4)} 100%{opacity:0;transform:translate(-50%,-50%) scale(3.2)} }
+        .daily-event-card { background:linear-gradient(135deg,#fff 0%,#f8fafc 55%,#eef2ff 100%); animation:dailyCardIn .45s cubic-bezier(.16,1,.3,1); }
+        @keyframes dailyCardIn { from{opacity:0;transform:translateY(-12px) scale(.94)} to{opacity:1;transform:none} }
+        .great-success-avatar { animation:greatSuccess .8s cubic-bezier(.16,1,.3,1)!important; }
+        @keyframes greatSuccess { 0%{transform:scale(1)} 25%{transform:scale(.75,1.25) rotate(-8deg)} 55%{transform:translateY(-25px) scale(1.35) rotate(8deg);filter:brightness(1.5) drop-shadow(0 0 18px #facc15)} 100%{transform:scale(1)} }
+        .event-choice { position:relative; overflow:hidden; }
+        .event-choice::after { content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 25%,rgba(255,255,255,.25),transparent 70%);transform:translateX(-120%);transition:.5s; }
+        .event-choice:hover::after { transform:translateX(120%); }
+        .meta-upgrade { background:linear-gradient(145deg,rgba(255,255,255,.1),rgba(255,255,255,.04)); }
+        .meta-upgrade:not(:disabled):hover { transform:translateY(-2px); border-color:#facc15; }
+        .meta-upgrade:disabled { opacity:.45; filter:grayscale(.5); }
+    </style>
+</head>
+<body class="bg-slate-900 h-full w-full">
+    <div id="transition-overlay" class="fixed inset-0 z-[9999] bg-slate-900 pointer-events-none opacity-100 transition-opacity duration-500"></div>
+
+    <div id="game-container" class="relative w-full h-full bg-white overflow-hidden flex flex-col">
+        <!-- Header -->
+        <div id="header-panel" class="bg-slate-800 text-white p-2 md:p-3 flex justify-between items-center z-50 shadow-md shrink-0 h-14 md:h-16 w-full">
+            <div class="flex items-center gap-2 overflow-hidden">
+                <div class="w-8 h-8 md:w-10 md:h-10 bg-yellow-400 rounded-full flex items-center justify-center text-slate-900 font-bold border-2 border-white shrink-0"><span id="header-icon"><i class="fas fa-egg"></i></span></div>
+                <div class="overflow-hidden min-w-0">
+                    <div id="player-name-display" class="font-bold text-sm md:text-base leading-tight whitespace-nowrap truncate">未設定</div>
+                    <div id="phase-display" class="text-[10px] md:text-xs text-slate-300 whitespace-nowrap truncate">準備中</div>
+                </div>
+                <div id="trait-display" class="hidden trait-badge text-[9px] md:text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white/50 animate-pulse whitespace-nowrap shrink-0">特性: なし</div>
+            </div>
+            <div class="flex flex-col items-end shrink-0 ml-2">
+                <div id="turn-display" class="text-lg md:text-2xl font-black text-yellow-400 whitespace-nowrap">TURN 1</div>
+                <div class="flex items-center gap-2">
+                    <div id="turn-sub" class="text-[10px] md:text-xs text-slate-400 whitespace-nowrap">あと10ターン</div>
+                    <div id="bp-display" class="hidden bg-slate-700 px-1.5 py-0.5 rounded text-[10px] md:text-xs font-bold text-yellow-300 border border-yellow-500/50 whitespace-nowrap">BP: 0</div>
+                    <button id="sound-toggle" onclick="event.stopPropagation(); Game.toggleSound()" class="w-6 h-6 rounded-full bg-slate-700 text-slate-300 hover:text-yellow-300 transition text-[10px]" aria-label="サウンド切替"><i class="fas fa-volume-up"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="scene-start" class="absolute inset-0 z-40 bg-gradient-to-br from-indigo-500 to-purple-600 flex flex-col items-center justify-center p-6 text-white transition-opacity duration-500 overflow-y-auto">
+            <div class="mb-4 md:mb-8 text-center float-anim mt-auto md:mt-0">
+                <i class="fas fa-egg text-6xl md:text-7xl mb-2 md:mb-4 text-yellow-300"></i>
+                <h1 class="text-4xl md:text-5xl font-extrabold mb-1 md:mb-2 text-outline tracking-wider">育成っち<br>バトル！</h1>
+                <p class="text-sm md:text-lg opacity-90 mt-1">ジョブを選んで、最強の「っち」を育てろ！</p>
+                <div id="meta-start-summary" class="mt-2 inline-flex items-center gap-2 bg-slate-900/25 border border-white/20 rounded-full px-3 py-1 text-[10px] md:text-xs font-bold">継承強化なし</div>
+            </div>
+            <div class="w-full max-w-md space-y-4 md:space-y-6 bg-white/10 backdrop-blur-md p-4 md:p-8 rounded-2xl md:rounded-3xl border border-white/20 shadow-2xl mb-auto md:mb-0">
+                <div>
+                    <label class="block text-xs md:text-sm font-bold mb-1 ml-1 text-indigo-100">なまえ</label>
+                    <input type="text" id="input-name" placeholder="なまえを入力" maxlength="6" class="w-full px-3 py-2 md:px-4 md:py-3 rounded-xl text-slate-800 font-bold text-base md:text-lg focus:outline-none focus:ring-4 focus:ring-yellow-400 shadow-inner">
+                </div>
+                <div>
+                    <label class="block text-xs md:text-sm font-bold mb-2 ml-1 text-indigo-100">タイプ選択</label>
+                    <div class="grid grid-cols-3 gap-2 md:gap-3">
+                        <button onclick="Game.selectType('hp')" id="btn-type-hp" class="type-btn bg-green-500 hover:bg-green-400 p-2 md:p-3 rounded-xl font-bold text-xs md:text-sm transition transform active:scale-95 border-b-4 border-green-700 text-white shadow-lg flex flex-col items-center"><i class="fas fa-heart text-xl md:text-2xl mb-1"></i><span>体力</span></button>
+                        <button onclick="Game.selectType('str')" id="btn-type-str" class="type-btn bg-red-500 hover:bg-red-400 p-2 md:p-3 rounded-xl font-bold text-xs md:text-sm transition transform active:scale-95 border-b-4 border-red-700 text-white shadow-lg flex flex-col items-center"><i class="fas fa-fist-raised text-xl md:text-2xl mb-1"></i><span>攻撃</span></button>
+                        <button onclick="Game.selectType('int')" id="btn-type-int" class="type-btn bg-blue-500 hover:bg-blue-400 p-2 md:p-3 rounded-xl font-bold text-xs md:text-sm transition transform active:scale-95 border-b-4 border-blue-700 text-white shadow-lg flex flex-col items-center"><i class="fas fa-hat-wizard text-xl md:text-2xl mb-1"></i><span>魔力</span></button>
+                    </div>
+                </div>
+                <button onclick="Game.start()" class="w-full bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-black py-3 md:py-4 rounded-xl text-xl md:text-2xl shadow-xl transform transition active:translate-y-1 active:shadow-none border-b-4 border-yellow-600 mt-2">ゲームスタート！</button>
+            </div>
+        </div>
+
+        <!-- Training Scene -->
+        <div id="scene-training" class="hidden absolute top-14 md:top-16 bottom-0 left-0 right-0 bg-slate-100 flex flex-col md:flex-row overflow-hidden">
+            <div id="training-hero" class="flex-1 flex flex-col items-center justify-center p-4 relative md:w-1/2 md:border-r md:border-slate-200 bg-white md:bg-transparent overflow-y-auto">
+                <div class="relative w-24 h-24 mb-4 md:w-48 md:h-48 md:mb-10 shrink-0">
+                    <div id="char-avatar" class="w-full h-full bg-white rounded-full border-4 md:border-8 border-slate-800 shadow-2xl flex items-center justify-center text-5xl md:text-8xl relative z-10 float-anim">🐣</div>
+                    <div class="absolute -bottom-2 md:-bottom-4 w-full h-4 md:h-6 bg-black/20 rounded-[100%] filter blur-md"></div>
+                </div>
+                <div id="training-stats" class="w-full max-w-xs md:max-w-sm bg-white rounded-2xl md:rounded-3xl shadow-xl p-4 md:p-6 border border-slate-200">
+                    <div class="mb-4 md:mb-6 text-center">
+                        <div class="flex justify-between items-end mb-1 md:mb-2">
+                            <span class="text-xs md:text-sm font-bold text-slate-500">現在の体力 (コスト)</span>
+                            <span class="font-black text-xl md:text-2xl text-green-600"><span id="train-hp-val">50</span><span class="text-xs md:text-base text-slate-400"> / <span id="train-maxhp-val">50</span></span></span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-3 md:h-5 overflow-hidden shadow-inner"><div id="train-hp-bar" class="bg-green-500 h-full w-full transition-all duration-300"></div></div>
+                        <div class="text-[10px] md:text-xs text-red-500 font-bold mt-1 md:mt-2 text-right h-4"><span id="hp-warning" class="hidden"><i class="fas fa-exclamation-triangle"></i> 体力が足りません！</span></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 md:gap-6 text-center border-t border-slate-100 pt-4 md:pt-6">
+                        <div class="border-r border-slate-100"><div class="text-xs md:text-sm text-slate-400 font-bold mb-1">攻撃力</div><div id="stat-str" class="text-2xl md:text-4xl font-black text-red-600">5</div></div>
+                        <div><div class="text-xs md:text-sm text-slate-400 font-bold mb-1">魔力</div><div id="stat-int" class="text-2xl md:text-4xl font-black text-blue-600">5</div></div>
+                    </div>
+                </div>
+            </div>
+            <div id="training-actions" class="bg-slate-50 p-4 md:p-6 z-10 md:w-1/2 md:h-full flex flex-col justify-center items-center shadow-[0_-10px_30px_rgba(0,0,0,0.05)] md:shadow-none shrink-0">
+                <div id="daily-event-card" class="daily-event-card w-full max-w-xs md:max-w-md rounded-xl md:rounded-2xl border-2 border-indigo-100 shadow-md p-2.5 md:p-3 mb-2 md:mb-4 flex items-center gap-3">
+                    <div id="daily-event-icon" class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl md:text-2xl shrink-0">🌤️</div>
+                    <div class="min-w-0"><div class="flex items-center gap-2"><span id="daily-event-day" class="text-[9px] font-black bg-slate-800 text-white px-1.5 py-0.5 rounded">DAY 1</span><span id="daily-event-title" class="font-black text-sm md:text-base text-slate-800 truncate">穏やかな一日</span></div><div id="daily-event-desc" class="text-[10px] md:text-xs text-slate-500 leading-tight mt-0.5">基本メニューでじっくり育成。</div></div>
+                </div>
+                <p class="text-center font-bold text-slate-500 mb-2 md:mb-3 text-xs md:text-base">今日のメニュー (ダブルタップで決定)</p>
+                <div class="grid grid-cols-2 md:grid-cols-1 gap-2 md:gap-4 w-full max-w-xs md:max-w-md">
+                    <button id="act-btn-hp" onclick="Game.tryAction('hp')" class="action-btn bg-green-50 hover:bg-green-100 text-green-800 p-2 md:p-4 rounded-xl md:rounded-2xl border-2 border-green-200 transition-all duration-200 h-20 md:h-20 group relative overflow-hidden shadow-sm active:scale-95"></button>
+                    <button id="act-btn-str" onclick="Game.tryAction('str')" class="action-btn bg-red-50 hover:bg-red-100 text-red-800 p-2 md:p-4 rounded-xl md:rounded-2xl border-2 border-red-200 transition-all duration-200 h-20 md:h-20 group relative overflow-hidden shadow-sm active:scale-95"></button>
+                    <button id="act-btn-int" onclick="Game.tryAction('int')" class="action-btn bg-blue-50 hover:bg-blue-100 text-blue-800 p-2 md:p-4 rounded-xl md:rounded-2xl border-2 border-blue-200 transition-all duration-200 h-20 md:h-20 group relative overflow-hidden shadow-sm active:scale-95"></button>
+                    <button id="act-btn-rest" onclick="Game.tryAction('rest')" class="action-btn bg-yellow-100 hover:bg-yellow-200 text-yellow-900 p-2 md:p-4 rounded-xl md:rounded-2xl border-b-4 border-yellow-400 transition-all duration-200 h-20 md:h-20 group relative overflow-hidden shadow-sm active:scale-95"></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Shop Scene -->
+        <div id="scene-shop" class="hidden absolute inset-0 top-14 md:top-16 z-50 bg-slate-800 flex flex-col p-4 md:p-6 overflow-hidden">
+            <div class="flex justify-between items-center mb-4 md:mb-6 border-b border-slate-600 pb-2 md:pb-4 shrink-0">
+                <div><h2 class="text-white text-2xl md:text-3xl font-bold mb-1"><i class="fas fa-store text-yellow-400"></i> 補給所</h2><p class="text-slate-400 text-xs md:text-sm">BPを使ってデッキ強化</p></div>
+                <div class="text-right"><div class="text-yellow-400 font-black text-2xl md:text-4xl whitespace-nowrap" id="shop-bp">0 BP</div></div>
+            </div>
+            <div class="flex md:hidden gap-2 mb-4 shrink-0">
+                <button onclick="Game.switchShopTab('upgrade')" id="tab-upgrade" class="flex-1 bg-slate-700 text-white py-2 rounded-t-lg border-b-2 border-green-400 font-bold text-sm">強化</button>
+                <button onclick="Game.switchShopTab('remove')" id="tab-remove" class="flex-1 bg-slate-700 text-slate-400 py-2 rounded-t-lg border-b-2 border-transparent font-bold text-sm">削除</button>
+                <button onclick="Game.switchShopTab('buy')" id="tab-buy" class="flex-1 bg-slate-700 text-slate-400 py-2 rounded-t-lg border-b-2 border-transparent font-bold text-sm">購入</button>
+            </div>
+            <div class="flex-1 overflow-y-auto pb-20 custom-scroll relative">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
+                    <div id="shop-col-upgrade" class="shop-col md:flex bg-slate-700/50 rounded-2xl p-4 border border-slate-600 flex-col h-full overflow-hidden">
+                        <h3 class="hidden md:flex text-white font-bold text-lg mb-4 items-center gap-2"><i class="fas fa-arrow-up text-green-400"></i> カード強化 <span class="text-xs bg-slate-800 px-2 py-1 rounded ml-auto text-yellow-400">45 BP / レア80</span></h3>
+                        <div class="md:hidden text-center text-green-400 text-xs font-bold mb-2">消費: 45 BP (レア80 BP)</div>
+                        <div id="shop-upgrade-list" class="space-y-2 flex-1 overflow-y-auto pr-1 custom-scroll"></div>
+                    </div>
+                    <div id="shop-col-remove" class="shop-col hidden md:flex bg-slate-700/50 rounded-2xl p-4 border border-slate-600 flex-col h-full overflow-hidden">
+                        <h3 class="hidden md:flex text-white font-bold text-lg mb-4 items-center gap-2"><i class="fas fa-trash-alt text-red-400"></i> カード削除 <span class="text-xs bg-slate-800 px-2 py-1 rounded ml-auto text-yellow-400">25 BP</span></h3>
+                        <div class="md:hidden text-center text-red-400 text-xs font-bold mb-2">消費: 25 BP (デッキから消去)</div>
+                        <div id="shop-remove-list" class="space-y-2 flex-1 overflow-y-auto pr-1 custom-scroll"></div>
+                    </div>
+                    <div id="shop-col-buy" class="shop-col hidden md:flex bg-slate-700/50 rounded-2xl p-4 border border-slate-600 flex-col h-full overflow-hidden">
+                        <h3 class="hidden md:flex text-white font-bold text-lg mb-4 items-center gap-2"><i class="fas fa-shopping-cart text-blue-400"></i> 新規購入 <span class="text-xs bg-slate-800 px-2 py-1 rounded ml-auto text-yellow-400">50 BP</span></h3>
+                        <div class="md:hidden text-center text-blue-400 text-xs font-bold mb-2">消費: 50 BP</div>
+                        <div id="shop-buy-list" class="space-y-2 flex-1 overflow-y-auto pr-1 custom-scroll"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="absolute bottom-4 right-4 md:bottom-6 md:right-6 z-50">
+                <button onclick="Game.leaveShop()" class="bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-bold py-3 px-6 md:py-4 md:px-8 rounded-2xl shadow-lg text-lg md:text-xl border-b-4 border-yellow-600 active:scale-95 transition">出発する <i class="fas fa-forward"></i></button>
+            </div>
+        </div>
+
+        <!-- Cut-in Overlay -->
+        <div id="scene-cutin" class="hidden fixed inset-0 z-[70] flex items-center justify-center pointer-events-auto" style="pointer-events: auto;">
+            <div id="cutin-band" class="absolute left-0 w-full h-48 md:h-64 bg-yellow-400 border-y-8 border-white shadow-2xl origin-center transform scale-y-0"></div>
+            <div id="cutin-content" class="relative z-10 flex items-center justify-center gap-4 md:gap-8 px-4 opacity-0">
+                <div id="cutin-icon" class="text-6xl md:text-9xl drop-shadow-md filter brightness-125"></div>
+                <div class="text-left">
+                    <div id="cutin-title" class="text-4xl md:text-7xl font-black text-white text-outline italic whitespace-nowrap"></div>
+                    <div class="flex items-center gap-3 mt-2">
+                        <span id="cutin-stat" class="text-2xl md:text-4xl font-bold text-slate-900 drop-shadow-sm whitespace-nowrap"></span>
+                        <span id="cutin-cost" class="hidden text-lg md:text-2xl font-bold text-red-600 bg-white/80 px-3 py-1 rounded-lg whitespace-nowrap shadow-sm"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Draft Scene -->
+        <div id="scene-draft" class="hidden absolute inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center p-4 md:p-8 backdrop-blur-md overflow-hidden">
+            <div class="text-center mb-4 md:mb-8 shrink-0">
+                <h2 id="draft-title" class="text-white text-2xl md:text-4xl font-bold mb-1 md:mb-3 text-outline tracking-wider">カード獲得！</h2>
+                <p id="draft-subtitle" class="text-slate-300 text-xs md:text-lg">強化完了！1枚選んでデッキに追加</p>
+            </div>
+            <div id="draft-container" class="w-full max-w-6xl grid grid-cols-3 gap-2 md:gap-6 overflow-y-auto pb-4 px-2 md:px-4"></div>
+            <div id="draft-skip-container" class="mt-4 md:mt-8 w-full max-w-md hidden shrink-0">
+                <button onclick="Game.skipDraft()" class="w-full bg-transparent hover:bg-slate-800 text-slate-400 font-bold py-3 md:py-4 rounded-xl border-2 border-slate-600 transition text-sm md:text-lg">スキップ (入手しない)</button>
+            </div>
+        </div>
+
+        <!-- Battle Scene -->
+        <div id="scene-battle" class="hidden absolute top-14 md:top-16 bottom-0 left-0 right-0 bg-slate-200 overflow-hidden select-none" onclick="Game.deselectCard()">
+            <div class="battle-sky absolute inset-0 z-0 pointer-events-none"></div>
+            <div class="arena-floor pointer-events-none z-[1]"></div>
+            <div id="battle-flash" class="battle-flash"></div>
+            <div id="battle-fx-layer" aria-hidden="true"></div>
+            <div id="combo-panel" class="combo-panel absolute top-2 left-2 md:top-4 md:left-5 z-30 bg-slate-900/80 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-xl border border-yellow-300/50 shadow-xl backdrop-blur-sm pointer-events-none">
+                <div class="text-[8px] md:text-[10px] text-yellow-300 font-black tracking-widest">CHAIN</div>
+                <div class="leading-none"><span id="combo-count" class="text-2xl md:text-4xl font-black text-white">0</span><span class="text-xs md:text-sm text-yellow-300 ml-1 font-bold">COMBO</span></div>
+            </div>
+            <!-- Enemy Area -->
+            <div class="enemy-area absolute top-0 left-0 right-0 h-[45%] flex flex-col items-center justify-center z-10 pt-2 md:pt-4">
+                <div class="absolute top-2 right-2 md:top-4 md:right-4 flex gap-2 md:gap-3 text-[10px] md:text-sm font-bold text-slate-600 bg-white/50 backdrop-blur p-1.5 md:p-2 rounded-lg shadow-sm">
+                    <div class="flex items-center gap-1"><i class="fas fa-layer-group"></i><span id="battle-deck-count">10</span></div>
+                    <div class="flex items-center gap-1"><i class="fas fa-trash-alt"></i><span id="battle-discard-count">0</span></div>
+                    <div class="flex items-center gap-1"><i class="fas fa-ban"></i><span id="battle-exhaust-count">0</span></div>
+                </div>
+                <div class="enemy-shell w-20 h-20 md:w-32 md:h-32 mb-1 md:mb-2">
+                    <div class="enemy-aura"></div><div class="enemy-ring"></div>
+                    <div id="enemy-sprite" class="text-7xl md:text-9xl transition-transform duration-100 drop-shadow-2xl filter hover:brightness-110">👿</div>
+                </div>
+                <div class="text-center w-56 md:w-80 bg-white/40 backdrop-blur-sm rounded-xl p-2 md:p-3 shadow-sm border border-white/50">
+                    <div class="flex items-center justify-center gap-2 mb-1"><span id="enemy-level" class="text-[9px] md:text-xs bg-slate-800 text-white px-1.5 py-0.5 rounded font-black">LV.1</span><div id="enemy-name" class="font-bold text-base md:text-xl text-slate-800 whitespace-nowrap overflow-hidden text-ellipsis">わるいっち</div></div>
+                    <div class="w-full bg-slate-300 h-4 md:h-5 rounded-full relative overflow-hidden shadow-inner border border-slate-400 mb-1 md:mb-2">
+                        <div id="enemy-hp-bar" class="bg-purple-600 h-full w-full transition-all duration-300"></div>
+                        <div class="hp-bar-shine"></div>
+                        <div id="enemy-hp-text" class="absolute inset-0 flex items-center justify-center text-[10px] md:text-xs text-white font-bold tracking-wider">100/100</div>
+                    </div>
+                    <div id="enemy-intent" class="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-base font-bold text-red-600 bg-red-100 py-0.5 px-3 md:py-1 md:px-4 rounded-full inline-block shadow-sm whitespace-nowrap"><i class="fas fa-sword"></i> <span>攻撃 10</span></div>
+                    <div id="enemy-statuses" class="min-h-[16px] mt-1.5 flex flex-wrap gap-1 justify-center"></div>
+                </div>
+            </div>
+            <div id="player-battle-avatar" class="player-battle-avatar absolute top-[47%] right-5 md:right-24 z-20 text-5xl md:text-7xl pointer-events-none">🐣</div>
+            <!-- Player Status -->
+            <div id="player-panel" class="absolute top-[50%] left-2 md:left-24 transform -translate-y-1/2 z-20 flex flex-col gap-2 md:gap-3 w-32 md:w-56">
+                <div class="bg-white rounded-xl md:rounded-2xl p-2 md:p-3 shadow-lg border-2 border-slate-100">
+                    <div class="flex items-center gap-1 md:gap-2 mb-1">
+                        <div class="bg-green-100 text-green-600 p-1 md:p-1.5 rounded-lg"><i class="fas fa-heart text-base md:text-xl"></i></div>
+                        <div class="font-black text-lg md:text-2xl text-slate-800"><span id="battle-player-hp">50</span><span class="text-xs md:text-sm text-slate-400">/</span><span id="battle-player-maxhp" class="text-xs md:text-base text-slate-500">50</span></div>
+                    </div>
+                    <div id="battle-block" class="hidden bg-blue-50 text-blue-600 px-1.5 md:px-2 py-0.5 md:py-1 rounded font-bold text-xs md:text-sm border border-blue-100 flex items-center gap-1 md:gap-2 mt-1 whitespace-nowrap"><i class="fas fa-shield-alt"></i> <span id="battle-block-val">0</span></div>
+                    <div id="player-statuses" class="min-h-[14px] mt-1.5 flex flex-wrap gap-1"></div>
+                </div>
+                <div class="bg-slate-800 rounded-xl p-2 md:p-3 shadow-lg text-white">
+                    <div class="text-[9px] md:text-[10px] font-bold text-slate-400 mb-1 whitespace-nowrap">行動権 (AP)</div>
+                    <div class="flex gap-1 md:gap-2" id="action-point-container"></div>
+                </div>
+                <button id="end-turn-button" onclick="event.stopPropagation(); Game.endPlayerTurn()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs md:text-sm font-black py-2 px-3 rounded-xl border-b-4 border-slate-900 active:translate-y-1 active:border-b-0 transition">
+                    ターン終了 <i class="fas fa-forward ml-1"></i>
+                </button>
+            </div>
+            <!-- Hand -->
+            <div id="battle-hand-area" class="absolute bottom-0 left-0 right-0 h-[40%] md:h-[35%] flex justify-center items-end pb-4 md:pb-6 z-30 pointer-events-none">
+                <div id="hand-container" class="flex justify-center items-end px-2 md:px-4 overflow-visible w-full max-w-6xl pointer-events-auto hand-overlap"></div>
+            </div>
+            <!-- Turn Banner -->
+            <div id="turn-banner" class="absolute top-1/2 left-0 right-0 py-6 md:py-8 bg-yellow-400/95 text-center transform -translate-y-1/2 scale-0 transition-transform duration-300 z-50 pointer-events-none shadow-2xl backdrop-blur-sm"><span class="text-3xl md:text-7xl font-black text-white text-outline tracking-widest whitespace-nowrap">ENEMY TURN</span></div>
+        </div>
+
+        <!-- Journey Event -->
+        <div id="scene-event" class="hidden absolute inset-0 top-14 md:top-16 z-[55] bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex flex-col items-center justify-center p-4 md:p-8 text-white overflow-y-auto custom-scroll">
+            <div class="text-center mb-5 md:mb-8">
+                <div class="text-yellow-300 text-4xl md:text-6xl mb-2 float-anim"><i class="fas fa-compass"></i></div>
+                <h2 class="text-2xl md:text-4xl font-black text-outline">道中イベント</h2>
+                <p class="text-xs md:text-base text-indigo-200 mt-2">旅の途中で、不思議な出会いが待っていた。</p>
+            </div>
+            <div id="event-choice-container" class="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-5 w-full max-w-5xl"></div>
+        </div>
+
+        <!-- Result -->
+        <div id="scene-result" class="hidden absolute inset-0 z-50 bg-slate-900/95 flex flex-col items-center p-4 md:p-6 text-white overflow-y-auto custom-scroll">
+            <div class="text-center mt-auto mb-4 md:mb-6">
+                <div id="result-icon" class="text-5xl md:text-7xl mb-2">💀</div>
+                <h2 id="result-title" class="text-2xl md:text-4xl font-bold mb-2">ちからつきた…</h2>
+                <div class="flex items-baseline justify-center gap-2"><span class="text-sm md:text-lg opacity-70">撃破</span><div id="result-score" class="text-4xl md:text-6xl font-black text-yellow-400">3</div><div class="text-lg text-slate-400 font-bold">体</div></div>
+                <div class="mt-2 inline-flex items-center gap-2 bg-indigo-500/20 border border-indigo-400/40 rounded-full px-4 py-1.5"><span class="text-indigo-200 text-xs">獲得したきらめき</span><span id="result-shards-earned" class="font-black text-yellow-300">+0 ✦</span><span class="text-slate-400 text-xs">所持</span><span id="result-shards-total" class="font-black">0</span></div>
+            </div>
+            <div class="w-full max-w-3xl bg-white/5 border border-white/10 rounded-2xl p-3 md:p-5 mb-4">
+                <div class="flex items-center justify-between mb-3"><div><h3 class="font-black text-lg md:text-xl"><i class="fas fa-egg text-yellow-300 mr-2"></i>継承強化</h3><p class="text-[10px] md:text-xs text-slate-400">きらめきを使うと、次の挑戦からずっと強くなる。</p></div><div class="text-yellow-300 font-black"><span id="meta-shards-display">0</span> ✦</div></div>
+                <div id="meta-upgrade-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3"></div>
+            </div>
+            <div class="w-full max-w-sm space-y-3 mb-auto">
+                <button onclick="location.reload()" class="w-full bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-black py-3.5 md:py-4 rounded-2xl text-lg md:text-xl shadow-lg transform transition active:translate-y-1 active:shadow-none border-b-4 border-yellow-600">強くなって再挑戦！</button>
+            </div>
+        </div>
+
+        <!-- Toast -->
+        <div id="toast" role="status" aria-live="polite" aria-atomic="true" class="absolute top-20 left-1/2 transform -translate-x-1/2 bg-slate-800/95 text-white px-4 py-2 md:px-6 md:py-3 rounded-full text-sm md:text-base font-bold shadow-2xl opacity-0 transition duration-300 pointer-events-none z-[100] whitespace-nowrap border border-slate-600 backdrop-blur-sm">Notification</div>
+    </div>
+
+    <!-- Script -->
+    <script type="module" src="js/script.js"></script>
+</body>
+</html>

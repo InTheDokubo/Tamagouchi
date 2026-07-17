@@ -1,0 +1,11 @@
+{
+  "name": "ikuseicchi-battle",
+  "version": "2.0.0",
+  "type": "module",
+  "private": true,
+  "description": "育成とデッキ構築を組み合わせたローグライトカードバトル",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --input-type=module --check < root/js/data.js && node --input-type=module --check < root/js/script.js && node tests/validate.mjs"
+  }
+}

@@ -1,0 +1,5 @@
+node_modules/
+.chrome-*/
+*-screen.png
+*-shot.png
+npm-debug.log*
