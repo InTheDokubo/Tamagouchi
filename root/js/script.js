@@ -1306,6 +1306,11 @@ const UI = {
             const selected = State.battle.selectedHandIndex === index;
             el.classList.toggle('card-selected',selected);
             el.setAttribute('aria-pressed',selected ? 'true' : 'false');
+            const preview = el.querySelector('.card-preview');
+            if (preview) {
+                preview.classList.toggle('hidden',!selected);
+                if (selected && State.battle.hand[index]) preview.innerText = Game.previewCard(State.battle.hand[index]);
+            }
         });
     },
     resumeSavedRun: () => {
@@ -1746,7 +1751,12 @@ const UI = {
             let selectedClass = "";
             if (State.battle.selectedHandIndex === idx) { selectedClass = "card-selected"; }
             const drawnClass = drawnUids.has(card.uid) ? 'card-draw-in' : '';
-            if (drawnClass) el.style.setProperty('--draw-delay',`${drawOrder++ * 70}ms`);
+            if (drawnClass) {
+                const drawDelay = drawOrder++ * 45;
+                el.style.setProperty('--draw-delay',`${drawDelay}ms`);
+                el.addEventListener('animationend',() => el.classList.remove('card-draw-in'),{once:true});
+                setTimeout(() => el.classList.remove('card-draw-in'),drawDelay + 520);
+            }
             el.className = `card-face ${card.rarity==='rare'?'rare-card':''} w-24 h-32 md:w-36 md:h-52 bg-white rounded-xl border-b-4 ${typeColor} shadow-xl flex flex-col p-1.5 md:p-2 relative cursor-pointer transition-all duration-300 shrink-0 ${opacity} ${selectedClass} ${drawnClass}`;
             el.setAttribute('role','button'); el.tabIndex = canPlay ? 0 : -1; el.setAttribute('aria-pressed', State.battle.selectedHandIndex === idx ? 'true' : 'false'); el.setAttribute('aria-label', `${card.name}。${card.desc}`);
             if(canPlay) el.onclick = (e) => Game.handleCardClick(e, idx);
@@ -1756,7 +1766,7 @@ const UI = {
             if(card.add_action) badges += `<span class="card-badge bg-orange-400 text-white" title="続けて行動"><i class="fas fa-forward"></i><span class="hidden md:inline">連撃</span></span>`;
             if(card.exhaust && card.secretMod !== 'rebirth') badges += `<span class="card-badge bg-purple-600 text-white" title="この戦闘で1回のみ"><i class="fas fa-hourglass-end"></i><span class="hidden md:inline">1回</span></span>`;
             if(card.secretMod) badges += `<span class="card-badge bg-fuchsia-600 text-white" title="秘伝：${SECRET_MODS[card.secretMod].name}"><i class="fas fa-wand-magic-sparkles"></i><span class="hidden md:inline">秘伝</span></span>`;
-            const preview = State.battle.selectedHandIndex === idx ? `<div class="relative z-10 bg-slate-900 text-yellow-300 text-[8px] md:text-[10px] font-black rounded px-1 py-0.5 text-center">${Game.previewCard(card)}</div>` : '';
+            const preview = `<div class="card-preview ${State.battle.selectedHandIndex===idx?'':'hidden'} relative z-10 bg-slate-900 text-yellow-300 text-[8px] md:text-[10px] font-black rounded px-1 py-0.5 text-center">${Game.previewCard(card)}</div>`;
             el.innerHTML = `<div class="card-badge-row absolute -top-2 md:-top-3 left-0 right-0 flex justify-center gap-0.5 md:gap-1 z-10 flex-wrap px-1">${badges}</div><div class="flex-1 flex flex-col items-center justify-center mt-3 md:mt-4 overflow-hidden relative z-[1]"><div class="text-2xl md:text-4xl mb-1 md:mb-2 drop-shadow-sm ${card.rarity==='rare' ? 'text-yellow-600' : (card.type==='phys'?'text-red-400':(card.type==='mag'?'text-blue-400':'text-green-400'))}"><i class="fas ${card.icon}"></i></div><div class="font-bold text-center text-[10px] md:text-sm leading-tight mb-1 md:mb-2 w-full truncate ${card.rarity==='rare'?'text-yellow-800':'text-slate-800'}">${card.name}</div><p class="text-[8px] md:text-xs text-center text-slate-500 leading-tight px-0.5 line-clamp-3">${card.desc}</p></div>${preview}`;
             handCont.appendChild(el);
         });

@@ -22,17 +22,28 @@ const evaluate = async expression => {
     return result.result.value;
 };
 const wait = ms => new Promise(resolve => setTimeout(resolve,ms));
+const waitFor = async (expression, timeout = 8000) => {
+    const started = Date.now();
+    while (Date.now() - started < timeout) {
+        if (await evaluate(expression)) return;
+        await wait(100);
+    }
+    throw new Error(`Timed out waiting for: ${expression}`);
+};
 
 await send('Runtime.enable');
 await send('Page.enable');
+await send('Network.enable');
+await send('Network.setCacheDisabled',{cacheDisabled:true});
 await send('Page.navigate',{url:'http://localhost:3000'});
-await wait(1200);
+await waitFor(`typeof Game !== 'undefined'`);
 await evaluate(`document.getElementById('input-name').value='テスト'; Game.selectType('str'); Game.start(); true`);
 await wait(1500);
 const savedRun = await evaluate(`JSON.parse(localStorage.getItem('ikuseicchi_run_v1') || 'null')`);
 if (!savedRun || savedRun.phase !== 'training' || savedRun.name !== 'テストっち') throw new Error(`Run was not saved: ${JSON.stringify(savedRun)}`);
 await send('Page.reload');
-await wait(1300);
+await waitFor(`typeof Game !== 'undefined'`);
+await waitFor(`!document.getElementById('scene-training').classList.contains('hidden')`);
 const restoredRun = await evaluate(`({visible:!document.getElementById('scene-training').classList.contains('hidden'),name:document.getElementById('player-name-display').textContent,menu:!!document.getElementById('run-menu')})`);
 if (!restoredRun.visible || restoredRun.name !== 'テストっち' || !restoredRun.menu) throw new Error(`Run was not restored: ${JSON.stringify(restoredRun)}`);
 await evaluate(`Game.openRunMenu(); true`);
@@ -54,7 +65,7 @@ await wait(1900);
 const analysis = await evaluate(`({visible:!document.getElementById('scene-analysis').classList.contains('hidden'),rank:document.getElementById('analysis-rank').textContent,hp:Number(document.getElementById('analysis-hp').textContent),deck:Number(document.getElementById('analysis-deck').textContent)})`);
 if (!analysis.visible || !analysis.rank || analysis.hp < 1 || analysis.deck < 1) throw new Error(`Growth analysis failed: ${JSON.stringify(analysis)}`);
 await evaluate(`Game.beginBattleFromAnalysis(); true`);
-await wait(1900);
+await wait(2600);
 const battle = await evaluate(`({
     visible: !document.getElementById('scene-battle').classList.contains('hidden'),
     enemy: document.getElementById('enemy-name').textContent,
@@ -62,14 +73,16 @@ const battle = await evaluate(`({
     level: document.getElementById('enemy-level').textContent,
     hand: document.getElementById('hand-container').children.length,
     arena: getComputedStyle(document.getElementById('scene-battle')).getPropertyValue('--arena-accent').trim(),
-    drawAnimations: document.querySelectorAll('#hand-container > .card-draw-in').length
+    unstableCards: Array.from(document.querySelectorAll('#hand-container > div')).filter(el=>{const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.left < -1 || r.right > innerWidth+1 || s.transform!=='none' || el.classList.contains('card-draw-in')}).map(el=>{const r=el.getBoundingClientRect();return {left:Math.round(r.left),right:Math.round(r.right),transform:getComputedStyle(el).transform,draw:el.classList.contains('card-draw-in')}})
 })`);
-if (!battle.visible || !battle.enemy || battle.hand < 1 || !battle.arena || battle.drawAnimations < 1) throw new Error(`Battle did not initialize: ${JSON.stringify(battle)}`);
+if (!battle.visible || !battle.enemy || battle.hand < 1 || !battle.arena || battle.unstableCards.length !== 0) throw new Error(`Battle did not initialize cleanly: ${JSON.stringify(battle)}`);
 if (!/^[ぁ-ん]{1,4}っち$/.test(battle.enemy) || /[一-龯]/.test(battle.enemy)) throw new Error(`Invalid enemy name: ${battle.enemy}`);
 
 const hpBefore = Number((battle.enemyHp || '').split('/')[0]);
 await evaluate(`(Array.from(document.querySelectorAll('#hand-container > div')).find(el=>el.className.includes('border-red')) || document.querySelector('#hand-container > div'))?.click(); true`);
 await wait(80);
+const prediction = await evaluate(`(()=>{const el=document.querySelector('#hand-container > .card-selected .card-preview');return {visible:!!el&&!el.classList.contains('hidden'),text:el?.textContent||''}})()`);
+if (!prediction.visible || !prediction.text.includes('予測') || !prediction.text.includes('DMG')) throw new Error(`Damage prediction missing: ${JSON.stringify(prediction)}`);
 await evaluate(`document.querySelector('#hand-container > .card-selected')?.click(); true`);
 await wait(1300);
 const afterCard = await evaluate(`({ hp:document.getElementById('enemy-hp-text').textContent, hand:document.getElementById('hand-container').children.length, fx:document.getElementById('battle-fx-layer').children.length })`);
