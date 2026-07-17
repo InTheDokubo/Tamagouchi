@@ -77,8 +77,10 @@ const battle = await evaluate(`({
 })`);
 if (!battle.visible || !battle.enemy || battle.hand < 1 || !battle.arena || battle.unstableCards.length !== 0) throw new Error(`Battle did not initialize cleanly: ${JSON.stringify(battle)}`);
 if (!/^[ぁ-ん]{1,4}っち$/.test(battle.enemy) || /[一-龯]/.test(battle.enemy)) throw new Error(`Invalid enemy name: ${battle.enemy}`);
+const badgeLayout = await evaluate(`(()=>{Game.addCard('limit_break');let card=null;for(let i=0;i<14&&!card;i++){Game.spawnEnemy();card=Array.from(document.querySelectorAll('#hand-container>div')).find(el=>el.textContent.includes('限界突破'))}if(!card)return {found:false};const box=card.getBoundingClientRect(),row=card.querySelector('.card-badge-row'),badges=Array.from(card.querySelectorAll('.card-badge'));return {found:true,count:badges.length,inside:badges.every(el=>{const r=el.getBoundingClientRect();return r.left>=box.left-1&&r.right<=box.right+1&&r.top>=box.top-1&&r.bottom<=box.bottom+1}),rowWidth:Math.round(row.getBoundingClientRect().width),badgesWidth:Math.round(badges.reduce((sum,el)=>sum+el.getBoundingClientRect().width,0)),labelsHidden:Array.from(card.querySelectorAll('.card-badge-label')).every(el=>getComputedStyle(el).display==='none')}})()`);
+if (!badgeLayout.found || badgeLayout.count !== 3 || !badgeLayout.inside || badgeLayout.badgesWidth > badgeLayout.rowWidth || !badgeLayout.labelsHidden) throw new Error(`Card badges overflow: ${JSON.stringify(badgeLayout)}`);
 
-const hpBefore = Number((battle.enemyHp || '').split('/')[0]);
+const hpBefore = await evaluate(`Number(document.getElementById('enemy-hp-text').textContent.split('/')[0])`);
 await evaluate(`(Array.from(document.querySelectorAll('#hand-container > div')).find(el=>el.className.includes('border-red')) || document.querySelector('#hand-container > div'))?.click(); true`);
 await wait(80);
 const prediction = await evaluate(`(()=>{const el=document.querySelector('#hand-container > .card-selected .card-preview');return {visible:!!el&&!el.classList.contains('hidden'),text:el?.textContent||''}})()`);
