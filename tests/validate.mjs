@@ -48,6 +48,9 @@ if (CONSTANTS.COST_REMOVE >= CONSTANTS.COST_BUY) fail('Deck removal should remai
 
 const html = fs.readFileSync(new URL('../root/index.html', import.meta.url), 'utf8');
 const script = fs.readFileSync(new URL('../root/js/script.js', import.meta.url), 'utf8');
+if (!script.includes('const MULTI_HIT_INTERVAL = 145') || !script.includes('multiHit:true')) fail('Multi-hit attacks must use the extended readable hit interval');
+if (!script.includes("UI.traitActivation('attack'") || !script.includes("UI.traitActivation('vitality'")) fail('Attack and vitality traits must trigger dedicated animations');
+if (!html.includes('.trait-activation.attack') || !html.includes('.trait-activation.vitality') || !html.includes('.damage-number.multi-hit')) fail('Trait and multi-hit visual styles are missing');
 if ([...script.matchAll(/State\.hp\s*-=\s*card\.self_dmg/g)].length) fail('Card recoil must use the nonlethal shared handler');
 if ((script.match(/反動ではHP1未満にならない/g) || []).length < 2) fail('Upgraded recoil cards must retain their nonlethal description');
 const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');

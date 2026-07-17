@@ -98,6 +98,8 @@
         #battle-fx-layer { position:absolute; inset:0; z-index:75; pointer-events:none; overflow:hidden; }
         .damage-number { position:absolute; font-weight:900; font-size:clamp(28px,6vw,58px); color:#fff; -webkit-text-stroke:2px #1e293b; text-shadow:0 5px 0 rgba(15,23,42,.28); transform:translate(-50%,-50%); animation:damageRise .72s cubic-bezier(.16,1,.3,1) forwards; }
         .damage-number.critical { color:#fde047; font-size:clamp(38px,8vw,76px); -webkit-text-stroke-color:#9a3412; }
+        .damage-number.multi-hit { font-size:clamp(36px,7.5vw,70px); animation-duration:.9s; text-shadow:0 6px 0 rgba(15,23,42,.35),0 0 12px rgba(255,255,255,.75); }
+        .damage-number.critical.multi-hit { font-size:clamp(44px,9vw,82px); }
         .damage-number.heal { color:#4ade80; -webkit-text-stroke-color:#166534; }
         .damage-number.block { color:#60a5fa; -webkit-text-stroke-color:#1e3a8a; }
         .damage-number.hurt { color:#fb7185; -webkit-text-stroke-color:#7f1d1d; }
@@ -112,6 +114,15 @@
         .combo-panel.active { opacity:1; transform:translateY(0) scale(1); }
         .combo-bump { animation:comboBump .25s ease-out; }
         @keyframes comboBump { 50%{transform:scale(1.35) rotate(-4deg)} }
+        .trait-activation { position:absolute; left:50%; top:48%; width:min(88%,560px); height:88px; transform:translate(-50%,-50%); display:grid; place-items:center; z-index:95; pointer-events:none; isolation:isolate; animation:traitActivation .9s cubic-bezier(.16,1,.3,1) forwards; }
+        .trait-activation::before { content:""; position:absolute; inset:14px -12%; z-index:-1; transform:skewX(-12deg) scaleX(0); border:2px solid rgba(255,255,255,.9); animation:traitBand .9s cubic-bezier(.16,1,.3,1) forwards; }
+        .trait-activation.attack::before { background:linear-gradient(90deg,transparent,rgba(239,68,68,.94),rgba(251,146,60,.96),transparent); box-shadow:0 0 28px #ef4444; }
+        .trait-activation.vitality::before { border-radius:999px; transform:scale(.15); background:radial-gradient(circle,rgba(255,255,255,.92),rgba(34,197,94,.88) 42%,rgba(16,185,129,.18) 68%,transparent 72%); box-shadow:0 0 34px #22c55e; animation:traitLifeRing .9s cubic-bezier(.16,1,.3,1) forwards; }
+        .trait-activation-title { font-size:clamp(1.45rem,5.5vw,2.8rem); line-height:1; font-weight:900; color:#fff; letter-spacing:.06em; text-shadow:0 3px 0 rgba(15,23,42,.8),0 0 12px currentColor; }
+        .trait-activation-sub { margin-top:.3rem; font-size:clamp(.72rem,2.7vw,1rem); font-weight:900; color:#fef9c3; letter-spacing:.08em; text-shadow:0 2px 0 rgba(15,23,42,.8); }
+        @keyframes traitActivation { 0%{opacity:0;transform:translate(-50%,-50%) scale(.65)} 18%,70%{opacity:1;transform:translate(-50%,-50%) scale(1)} 100%{opacity:0;transform:translate(-50%,-58%) scale(1.08)} }
+        @keyframes traitBand { 0%{transform:skewX(-12deg) scaleX(0)} 25%,72%{transform:skewX(-12deg) scaleX(1)} 100%{transform:skewX(-12deg) scaleX(0)} }
+        @keyframes traitLifeRing { 0%{opacity:0;transform:scale(.1)} 30%{opacity:1;transform:scale(1)} 72%{opacity:.85;transform:scale(1.12)} 100%{opacity:0;transform:scale(1.45)} }
         .status-chip { display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border-radius:999px; font-size:9px; line-height:1; font-weight:900; box-shadow:0 2px 5px rgba(15,23,42,.18); white-space:nowrap; }
         .hp-bar-shine { position:absolute; inset:0; transform:translateX(-110%); background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent); animation:barShine 1.8s linear infinite; }
         @keyframes barShine { to{transform:translateX(110%)} }

@@ -1,5 +1,7 @@
 import { CONSTANTS, ACTION_DATA, CARDS_DB, HIRAGANA, SECRET_MOD_BY_CARD } from './data.js';
 
+const MULTI_HIT_INTERVAL = 145;
+
 const META_UPGRADES = {
     vitality: { name:'生命の殻', icon:'fa-heart', color:'text-green-300', desc:'初期最大HP +5', max:5 },
     power: { name:'力の記憶', icon:'fa-fist-raised', color:'text-red-300', desc:'初期攻撃 +1', max:5 },
@@ -444,6 +446,7 @@ const Game = {
         if (State.playerType === 'str') {
             State.battle.actionsNextTurn = 2; 
             UI.toast("【特性】先手必勝！");
+            setTimeout(() => UI.traitActivation('attack','先手必勝','FIRST ACTION ×2'),120);
         } else {
             State.battle.actionsNextTurn = 1;
         }
@@ -496,6 +499,7 @@ const Game = {
             const shell = Math.max(6,Math.floor(State.maxHp * .1));
             State.battle.block += shell;
             UI.toast(`【特性】生命の殻 ブロック+${shell}`);
+            setTimeout(() => UI.traitActivation('vitality','生命の殻',`BLOCK +${shell}`),100);
         }
         if (State.playerType === 'int') State.battle.magBonus += 2;
         
@@ -645,7 +649,7 @@ const Game = {
                     UI.updateBattle();
                     Game.checkTurnEndCondition();
                 }
-            }, card.hits ? Math.min(480, card.hits * 75) : impactTier===3?280:160);
+            }, card.hits ? Math.min(980, (card.hits - 1) * MULTI_HIT_INTERVAL + 240) : impactTier===3?280:160);
         } else {
             Game.executeCardLogic(handIndex);
             UI.updateBattle();
@@ -701,7 +705,7 @@ const Game = {
             if (card.hits) {
                 for(let k=0; k<card.hits; k++) {
                     const hitDmg = Math.floor(dmg * (1 + Math.min(5,comboBefore + k) * .1));
-                    totalDealt += Game.dealDamage(hitDmg, { kind:'phys', delay:k * 75, critical: (card.rarity === 'rare' && k === card.hits-1) || hitDmg >= State.battle.enemy.maxHp * .25 });
+                    totalDealt += Game.dealDamage(hitDmg, { kind:'phys', delay:k * MULTI_HIT_INTERVAL, multiHit:true, critical: (card.rarity === 'rare' && k === card.hits-1) || hitDmg >= State.battle.enemy.maxHp * .25 });
                 }
             } else {
                 dmg = Math.floor(dmg * (1 + Math.min(5,comboBefore) * .1));
@@ -835,6 +839,7 @@ const Game = {
             State.battle.actionsLeft++;
             Game.drawCards(1);
             UI.toast('【特性】連撃の呼吸！ 行動権+1・1枚ドロー');
+            UI.traitActivation('attack','連撃の呼吸','ACTION +1 / DRAW +1');
         }
 
         let recycle = false;
@@ -890,7 +895,7 @@ const Game = {
         enemy.hp = Math.max(0, enemy.hp - finalAmount);
         State.battle.damageThisTurn += dealt;
         State.runStats.damageDealt += dealt;
-        UI.hitEnemy(dealt, meta.kind || 'phys', Boolean(meta.critical || vulnerable), meta.delay || 0);
+        UI.hitEnemy(dealt, meta.kind || 'phys', Boolean(meta.critical || vulnerable), meta.delay || 0, Boolean(meta.multiHit));
         return dealt;
     },
 
@@ -1088,6 +1093,7 @@ const Game = {
             if(State.hp < State.maxHp) {
                 State.hp = Math.min(State.maxHp, State.hp + regen);
                 UI.toast(`【特性】自然治癒 +${regen}`);
+                UI.traitActivation('vitality','自然治癒',`HP +${regen}`);
             }
         }
 
@@ -1462,19 +1468,30 @@ const UI = {
         const el = document.getElementById('battle-flash'); if (!el) return;
         el.className = 'battle-flash'; void el.offsetWidth; el.classList.add(`flash-${kind}`);
     },
-    combatNumber: (amount, kind = 'damage', targetId = 'enemy-sprite', delay = 0, critical = false) => {
+    traitActivation: (kind, title, subtitle = '') => {
+        const layer = document.getElementById('battle-fx-layer');
+        if (!layer) return;
+        layer.querySelectorAll(`.trait-activation.${kind}`).forEach(element => element.remove());
+        const el = document.createElement('div');
+        el.className = `trait-activation ${kind}`;
+        el.innerHTML = `<div class='text-center'><div class='trait-activation-title'>${title}</div><div class='trait-activation-sub'>${subtitle}</div></div>`;
+        layer.appendChild(el);
+        setTimeout(() => el.remove(), 980);
+        if (navigator.vibrate && !matchMedia('(prefers-reduced-motion: reduce)').matches) navigator.vibrate(kind === 'attack' ? [18,22,28] : 22);
+    },
+    combatNumber: (amount, kind = 'damage', targetId = 'enemy-sprite', delay = 0, critical = false, emphasis = false) => {
         if (!Number.isFinite(amount) || amount <= 0) return;
         const layer = document.getElementById('battle-fx-layer');
         const target = document.getElementById(targetId); const scene = document.getElementById('scene-battle');
         if (!layer || !target || !scene) return;
         const rect = target.getBoundingClientRect(); const base = scene.getBoundingClientRect();
         const el = document.createElement('div');
-        el.className = `damage-number ${kind}${critical ? ' critical' : ''}`;
+        el.className = `damage-number ${kind}${critical ? ' critical' : ''}${emphasis ? ' multi-hit' : ''}`;
         el.textContent = kind === 'heal' ? `+${Math.floor(amount)}` : kind === 'block' ? `🛡 ${Math.floor(amount)}` : Math.floor(amount);
         el.style.left = `${rect.left - base.left + rect.width / 2 + (Math.random() * 24 - 12)}px`;
         el.style.top = `${rect.top - base.top + rect.height * .42}px`;
         el.style.animationDelay = `${delay}ms`;
-        layer.appendChild(el); setTimeout(() => el.remove(), delay + 850);
+        layer.appendChild(el); setTimeout(() => el.remove(), delay + (emphasis ? 1050 : 850));
     },
     burst: (targetId, color = '#fbbf24', count = 8, delay = 0) => {
         const layer = document.getElementById('battle-fx-layer'); const target = document.getElementById(targetId); const scene = document.getElementById('scene-battle');
@@ -1511,7 +1528,7 @@ const UI = {
             running.forEach(animation => { try { if (animation.playState === 'paused') animation.play(); } catch (_) {} });
         }, duration);
     },
-    hitEnemy: (amount, kind = 'phys', critical = false, delay = 0) => {
+    hitEnemy: (amount, kind = 'phys', critical = false, delay = 0, multiHit = false) => {
         if (amount <= 0) return;
         setTimeout(() => {
             const sprite = document.getElementById('enemy-sprite'); const scene = document.getElementById('scene-battle');
@@ -1520,7 +1537,7 @@ const UI = {
             document.getElementById('battle-fx-layer').appendChild(fx); setTimeout(()=>fx.remove(),600);
             sprite.classList.remove('enemy-hit','enemy-hit-heavy'); void sprite.offsetWidth; sprite.classList.add(critical?'enemy-hit-heavy':'enemy-hit');
             const player = document.getElementById('player-battle-avatar'); player.classList.remove('player-attack'); void player.offsetWidth; player.classList.add('player-attack');
-            UI.combatNumber(amount, 'damage', 'enemy-sprite', 0, critical); UI.burst('enemy-sprite',kind==='mag'?'#a78bfa':'#fb7185',critical?12:7);
+            UI.combatNumber(amount, 'damage', 'enemy-sprite', 0, critical, multiHit); UI.burst('enemy-sprite',kind==='mag'?'#a78bfa':'#fb7185',critical?12:7);
             if (critical) {
                 UI.flash(kind === 'mag' ? 'mag' : 'phys');
                 const ratio = amount / Math.max(1,State.battle.enemy?.maxHp || amount);
