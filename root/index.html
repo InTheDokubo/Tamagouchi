@@ -147,6 +147,16 @@
         @keyframes dailyCardIn { from{opacity:0;transform:translateY(-12px) scale(.94)} to{opacity:1;transform:none} }
         .great-success-avatar { animation:greatSuccess .8s cubic-bezier(.16,1,.3,1)!important; }
         @keyframes greatSuccess { 0%{transform:scale(1)} 25%{transform:scale(.75,1.25) rotate(-8deg)} 55%{transform:translateY(-25px) scale(1.35) rotate(8deg);filter:brightness(1.5) drop-shadow(0 0 18px #facc15)} 100%{transform:scale(1)} }
+        .training-result-wait #cutin-band,.training-result-wait #cutin-content{animation:none!important;opacity:0}
+        .training-result-great{background:radial-gradient(circle at center,rgba(250,204,21,.3),rgba(15,23,42,.88));overflow:hidden}
+        .training-result-great::before,.training-result-great::after{content:"✦  ✧  ★  ✦  ✧";position:absolute;inset:0;display:grid;place-items:center;color:#fef08a;font-size:clamp(2rem,9vw,6rem);letter-spacing:clamp(1rem,7vw,6rem);text-shadow:0 0 22px #f59e0b;animation:greatResultBurst 1.45s cubic-bezier(.16,1,.3,1) forwards;pointer-events:none}
+        .training-result-great::after{content:"";inset:50%;width:12px;height:12px;border-radius:50%;box-shadow:0 0 0 8px #fff,0 0 0 30px #facc15,0 0 80px 65px #f59e0b;animation:greatResultFlash .9s ease-out forwards}
+        .training-result-great #cutin-band{background:linear-gradient(90deg,#f59e0b,#fef08a 45%,#fff 50%,#fef08a 55%,#f59e0b);border-color:#fff7ed;box-shadow:0 0 70px #facc15}
+        .training-result-great #cutin-title{font-size:clamp(2.7rem,10vw,7rem);color:#fff;text-shadow:0 4px 0 #b45309,0 0 22px #fff}
+        .training-result-great #cutin-stat{color:#7c2d12;background:#fff7ed;padding:.35rem .8rem;border-radius:999px}
+        @keyframes greatResultBurst{0%{opacity:0;transform:scale(.1) rotate(-25deg)}35%{opacity:1;transform:scale(1.2) rotate(8deg)}100%{opacity:0;transform:scale(2.2) rotate(22deg)}}
+        @keyframes greatResultFlash{0%{opacity:1;transform:translate(-50%,-50%) scale(.1)}100%{opacity:0;transform:translate(-50%,-50%) scale(9)}}
+        .run-menu-backdrop{background:rgba(15,23,42,.72);backdrop-filter:blur(8px)}
         .event-choice { position:relative; overflow:hidden; }
         .event-choice::after { content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 25%,rgba(255,255,255,.25),transparent 70%);transform:translateX(-120%);transition:.5s; }
         .event-choice:hover::after { transform:translateX(120%); }
@@ -227,6 +237,9 @@
                 </div>
             </div>
             <div id="training-actions" class="bg-slate-50 p-4 md:p-6 z-10 md:w-1/2 md:h-full flex flex-col justify-center items-center shadow-[0_-10px_30px_rgba(0,0,0,0.05)] md:shadow-none shrink-0">
+                <div class="w-full max-w-xs md:max-w-md flex justify-end mb-1">
+                    <button onclick="Game.openRunMenu()" class="text-[10px] md:text-xs font-bold text-slate-500 hover:text-red-600 bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm transition" aria-label="育成をやり直す、またはやめる"><i class="fas fa-rotate-left mr-1"></i>やり直す・やめる</button>
+                </div>
                 <div id="daily-event-card" class="daily-event-card w-full max-w-xs md:max-w-md rounded-xl md:rounded-2xl border-2 border-indigo-100 shadow-md p-2.5 md:p-3 mb-2 md:mb-4 flex items-center gap-3">
                     <div id="daily-event-icon" class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl md:text-2xl shrink-0">🌤️</div>
                     <div class="min-w-0"><div class="flex items-center gap-2"><span id="daily-event-day" class="text-[9px] font-black bg-slate-800 text-white px-1.5 py-0.5 rounded">DAY 1</span><span id="daily-event-title" class="font-black text-sm md:text-base text-slate-800 truncate">穏やかな一日</span></div><div id="daily-event-desc" class="text-[10px] md:text-xs text-slate-500 leading-tight mt-0.5">基本メニューでじっくり育成。</div></div>
@@ -360,6 +373,18 @@
             </div>
             <!-- Turn Banner -->
             <div id="turn-banner" class="absolute top-1/2 left-0 right-0 py-6 md:py-8 bg-yellow-400/95 text-center transform -translate-y-1/2 scale-0 transition-transform duration-300 z-50 pointer-events-none shadow-2xl backdrop-blur-sm"><span class="text-3xl md:text-7xl font-black text-white text-outline tracking-widest whitespace-nowrap">ENEMY TURN</span></div>
+        </div>
+
+        <!-- Run Menu -->
+        <div id="run-menu" class="hidden fixed inset-0 z-[120] run-menu-backdrop flex items-center justify-center p-5" onclick="if(event.target===this) Game.closeRunMenu()">
+            <div class="w-full max-w-sm bg-white rounded-3xl p-5 md:p-6 shadow-2xl border border-white/70 text-slate-800">
+                <div class="text-center mb-5"><div class="text-4xl mb-2">🥚</div><h2 class="text-xl font-black">育成を中断しますか？</h2><p class="text-xs text-slate-500 mt-1">どちらも現在の育成データを消して、キャラ選択へ戻ります。</p></div>
+                <div class="space-y-2">
+                    <button onclick="Game.returnToStart(false)" class="w-full bg-amber-400 hover:bg-amber-300 text-slate-900 font-black py-3 rounded-xl border-b-4 border-amber-600 active:translate-y-1 active:border-b-0"><i class="fas fa-rotate-left mr-2"></i>同じ名前でやり直す</button>
+                    <button onclick="Game.returnToStart(true)" class="w-full bg-red-50 hover:bg-red-100 text-red-700 font-bold py-3 rounded-xl border border-red-200"><i class="fas fa-door-open mr-2"></i>育成をやめる</button>
+                    <button onclick="Game.closeRunMenu()" class="w-full text-slate-500 font-bold py-2.5 rounded-xl hover:bg-slate-100">育成を続ける</button>
+                </div>
+            </div>
         </div>
 
         <!-- Journey Event -->

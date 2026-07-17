@@ -18,7 +18,7 @@ socket.addEventListener('message', event => {
 const send = (method, params = {}) => new Promise((resolve, reject) => { const id = ++sequence; pending.set(id,{resolve,reject}); socket.send(JSON.stringify({id,method,params})); });
 const evaluate = async expression => {
     const result = await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});
-    if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
     return result.result.value;
 };
 const wait = ms => new Promise(resolve => setTimeout(resolve,ms));
@@ -28,14 +28,24 @@ await send('Page.enable');
 await send('Page.navigate',{url:'http://localhost:3000'});
 await wait(1200);
 await evaluate(`document.getElementById('input-name').value='テスト'; Game.selectType('str'); Game.start(); true`);
-await wait(700);
+await wait(1500);
+const savedRun = await evaluate(`JSON.parse(localStorage.getItem('ikuseicchi_run_v1') || 'null')`);
+if (!savedRun || savedRun.phase !== 'training' || savedRun.name !== 'テストっち') throw new Error(`Run was not saved: ${JSON.stringify(savedRun)}`);
+await send('Page.reload');
+await wait(1300);
+const restoredRun = await evaluate(`({visible:!document.getElementById('scene-training').classList.contains('hidden'),name:document.getElementById('player-name-display').textContent,menu:!!document.getElementById('run-menu')})`);
+if (!restoredRun.visible || restoredRun.name !== 'テストっち' || !restoredRun.menu) throw new Error(`Run was not restored: ${JSON.stringify(restoredRun)}`);
+await evaluate(`Game.openRunMenu(); true`);
+const runMenuVisible = await evaluate(`!document.getElementById('run-menu').classList.contains('hidden')`);
+if (!runMenuVisible) throw new Error('Run menu did not open');
+await evaluate(`Game.closeRunMenu(); true`);
 if (process.argv.includes('--training-shot')) {
     const shot = await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
     fs.writeFileSync('training-screen.png',Buffer.from(shot.data,'base64'));
 }
 const trainingBefore = await evaluate(`Number(document.getElementById('stat-str').textContent)`);
 await evaluate(`(()=>{const original=Math.random;Math.random=()=>0;Game.tryAction('str');Game.tryAction('str');Math.random=original;return true})()`);
-await wait(1300);
+await wait(2400);
 const trainingAfter = await evaluate(`({stat:Number(document.getElementById('stat-str').textContent),draft:!document.getElementById('scene-draft').classList.contains('hidden'),choices:document.getElementById('draft-container').children.length})`);
 if (!trainingAfter.draft || trainingAfter.choices < 3 || trainingAfter.stat - trainingBefore < 4) throw new Error(`Great-success training failed: ${JSON.stringify(trainingAfter)}`);
 await evaluate(`Game.skipDraft(); true`);
@@ -72,6 +82,10 @@ await evaluate(`Game.gameOver(); true`);
 await wait(760);
 const retry = await evaluate(`({visible:!document.getElementById('scene-result').classList.contains('hidden'),upgrades:document.getElementById('meta-upgrade-grid').children.length,earned:document.getElementById('result-shards-earned').textContent})`);
 if (!retry.visible || retry.upgrades !== 4 || !retry.earned.includes('+')) throw new Error(`Retry progression failed: ${JSON.stringify(retry)}`);
+await evaluate(`Game.returnToStart(true); true`);
+await wait(760);
+const abandoned = await evaluate(`({visible:!document.getElementById('scene-start').classList.contains('hidden'),save:localStorage.getItem('ikuseicchi_run_v1')})`);
+if (!abandoned.visible || abandoned.save !== null) throw new Error(`Run quit failed: ${JSON.stringify(abandoned)}`);
 if (exceptions.length) throw new Error(`Browser exceptions: ${exceptions.join(' | ')}`);
 if (process.argv.includes('--screenshot')) {
     const shot = await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});

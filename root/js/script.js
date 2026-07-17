@@ -57,6 +57,36 @@ const State = {
     }
 };
 
+const RUN_SAVE_KEY = 'ikuseicchi_run_v1';
+const RUN_SAVE_FIELDS = ['phase','name','playerType','turn','maxTurns','bp','hp','maxHp','str','int','deck','shopTab','shopCards','rarePity','trainingEvent','lastTrainingEvent','journeyChoices','avatar','runShardsEarned'];
+const RunStorage = {
+    save() {
+        if (State.phase === 'start' || (State.phase === 'battle' && !State.battle.active)) return;
+        try {
+            const snapshot = { version:1, savedAt:Date.now() };
+            RUN_SAVE_FIELDS.forEach(key => { snapshot[key] = State[key]; });
+            snapshot.battle = { ...State.battle, processing:false, selectedHandIndex:null, pendingFx:0 };
+            localStorage.setItem(RUN_SAVE_KEY, JSON.stringify(snapshot));
+        } catch (_) {}
+    },
+    restore() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(RUN_SAVE_KEY) || 'null');
+            if (!saved || saved.version !== 1 || !['training','battle'].includes(saved.phase)) return false;
+            RUN_SAVE_FIELDS.forEach(key => { if (saved[key] !== undefined) State[key] = saved[key]; });
+            State.battle = { ...State.battle, ...(saved.battle || {}), processing:false, selectedHandIndex:null, pendingFx:0 };
+            State.meta = Meta.load();
+            State.selectedAction = null;
+            State.isTransitioning = false;
+            return true;
+        } catch (_) {
+            localStorage.removeItem(RUN_SAVE_KEY);
+            return false;
+        }
+    },
+    clear() { try { localStorage.removeItem(RUN_SAVE_KEY); } catch (_) {} }
+};
+
 // Small synthesized sounds: no audio files or downloads required.
 const Sound = {
     enabled: true,
@@ -99,6 +129,26 @@ const Sound = {
 // --- ゲームロジック (Game) ---
 const Game = {
     toggleSound: () => Sound.toggle(),
+    openRunMenu: () => {
+        if (State.phase !== 'training' || State.isTransitioning) return;
+        document.getElementById('run-menu').classList.remove('hidden');
+    },
+    closeRunMenu: () => document.getElementById('run-menu').classList.add('hidden'),
+    returnToStart: (clearName = false) => {
+        RunStorage.clear();
+        State.phase = 'start';
+        State.battle.active = false;
+        State.battle.processing = false;
+        State.isTransitioning = false;
+        State.selectedAction = null;
+        Game.closeRunMenu();
+        document.getElementById('scene-draft').classList.add('hidden');
+        document.getElementById('trait-display').classList.add('hidden');
+        const input = document.getElementById('input-name');
+        input.value = clearName ? '' : State.name.replace(/っち$/, '');
+        Game.selectType(State.playerType || 'hp');
+        UI.changeScene('scene-start', () => UI.updateStartMeta());
+    },
 
     selectType: (type) => {
         Sound.play('select');
@@ -115,6 +165,7 @@ const Game = {
     },
 
     start: () => {
+        RunStorage.clear();
         const input = document.getElementById('input-name');
         let name = input.value.trim() || 'ななし';
         if(!name.endsWith('っち')) name += 'っち';
@@ -161,6 +212,7 @@ const Game = {
         UI.updateActionButtons(); 
         UI.updateTraining();
         Game.rollTrainingEvent(true);
+        RunStorage.save();
         UI.toast(`誕生！${State.name}！`);
     },
 
@@ -184,6 +236,7 @@ const Game = {
         State.trainingEvent = event; State.lastTrainingEvent = event.id;
         State.selectedAction = null;
         UI.updateDailyEvent(); UI.updateActionButtons();
+        RunStorage.save();
     },
     getTrainingAction: (type) => {
         const event = State.trainingEvent || TRAINING_EVENTS[0];
@@ -232,10 +285,10 @@ const Game = {
         }
         if (State.trainingEvent.bp) State.bp += State.trainingEvent.bp;
         if (greatSuccess && State.trainingEvent.bpOnGreat) State.bp += State.trainingEvent.bpOnGreat;
-        if (greatSuccess) { title = '大成功！！'; icon = '🌟'; UI.greatSuccess(); Sound.play('rare'); }
+        if (greatSuccess) { title = '大成功！！！'; icon = '🌟'; }
         UI.updateTraining();
         const bonusText = (State.trainingEvent.bp || (greatSuccess && State.trainingEvent.bpOnGreat)) ? ` / BP +${(State.trainingEvent.bp||0)+(greatSuccess?State.trainingEvent.bpOnGreat||0:0)}` : '';
-        UI.showCutin({ icon, title, statText: `${gainStat} +${gainVal}${bonusText}`, costText: `HP -${action.cost}`, onComplete: () => UI.showDraft(type, 'training') });
+        UI.showCutin({ icon, title, statText: `${gainStat} +${gainVal}${bonusText}`, costText: `HP -${action.cost}`, variant:greatSuccess?'great':'training', onComplete: () => UI.showDraft(type, 'training') });
     },
     doRest: () => {
         const action = Game.getTrainingAction('rest');
@@ -1095,6 +1148,7 @@ const Game = {
         const defeated = State.battle.enemiesDefeated;
         State.runShardsEarned = 3 + Math.floor(defeated * .7) + Math.floor(defeated / 5) * 3;
         State.meta.shards += State.runShardsEarned; Meta.save(State.meta);
+        RunStorage.clear();
         document.getElementById('result-score').innerText = State.battle.enemiesDefeated;
         UI.changeScene('scene-result',() => UI.updateMetaResult());
     }
@@ -1128,6 +1182,30 @@ const UI = {
     updateStartMeta: () => {
         const levels = Object.values(State.meta.upgrades).reduce((sum,level)=>sum+level,0);
         document.getElementById('meta-start-summary').innerHTML = levels > 0 ? `<i class="fas fa-star text-yellow-300"></i> 継承LV ${levels} ・ ${State.meta.shards} ✦` : `<i class="fas fa-seedling text-green-200"></i> 継承強化なし ・ ${State.meta.shards} ✦`;
+    },
+    resumeSavedRun: () => {
+        const avatar = State.avatar || (State.playerType === 'hp' ? '🛡️' : State.playerType === 'str' ? '🔥' : '🔮');
+        const traits = { hp:'特性: 自然治癒・肉壁', str:'特性: 先手必勝', int:'特性: 魔力循環' };
+        document.getElementById('char-avatar').innerText = avatar;
+        document.getElementById('player-battle-avatar').innerText = avatar;
+        document.getElementById('trait-display').innerText = traits[State.playerType] || '特性: なし';
+        document.getElementById('trait-display').classList.remove('hidden');
+        document.getElementById('input-name').value = State.name.replace(/っち$/, '');
+        Game.tempType = State.playerType;
+        UI.updateHeader();
+        if (State.phase === 'training') {
+            UI.changeScene('scene-training', () => {
+                UI.updateTraining(); UI.updateDailyEvent(); UI.updateActionButtons();
+                UI.toast('育成データを読み込みました');
+            });
+        } else {
+            document.getElementById('bp-display').classList.remove('hidden');
+            UI.changeScene('scene-battle', () => {
+                UI.setArena(State.battle.enemy?.kind || (State.battle.enemy?.boss ? 'boss' : 'normal'));
+                UI.updateBattle();
+                UI.toast('バトルを再開しました');
+            });
+        }
     },
     setArena: (kind) => {
         const scene = document.getElementById('scene-battle');
@@ -1334,7 +1412,7 @@ const UI = {
             }
         });
     },
-    showCutin: ({ icon, title, statText, costText, onComplete }) => {
+    showCutin: ({ icon, title, statText, costText, variant = 'normal', onComplete }) => {
         const el = document.getElementById('scene-cutin');
         const band = document.getElementById('cutin-band');
         const content = document.getElementById('cutin-content');
@@ -1343,11 +1421,23 @@ const UI = {
         document.getElementById('cutin-stat').innerText = statText;
         document.getElementById('cutin-cost').innerText = costText;
         document.getElementById('cutin-cost').className = costText ? "text-lg md:text-2xl font-bold text-red-600 bg-white/80 px-3 py-1 rounded-lg whitespace-nowrap shadow-sm" : "hidden";
-        el.classList.remove('hidden');
+        el.classList.remove('hidden','training-result-wait','training-result-great');
+        if (variant === 'great') el.classList.add('training-result-great');
+        const anticipation = variant === 'great' ? 480 : variant === 'training' ? 220 : 0;
+        if (anticipation) el.classList.add('training-result-wait');
         band.classList.remove('anim-band'); content.classList.remove('anim-text');
-        void band.offsetWidth; 
-        band.classList.add('anim-band'); content.classList.add('anim-text');
-        setTimeout(() => { el.classList.add('hidden'); if (onComplete) onComplete(); }, 1150);
+        setTimeout(() => {
+            el.classList.remove('training-result-wait');
+            void band.offsetWidth;
+            band.classList.add('anim-band'); content.classList.add('anim-text');
+            if (variant === 'great') { UI.greatSuccess(); Sound.play('rare'); if (navigator.vibrate) navigator.vibrate([45,35,90,30,120]); }
+        }, anticipation);
+        const duration = anticipation + (variant === 'great' ? 1580 : 1150);
+        setTimeout(() => {
+            el.classList.add('hidden');
+            el.classList.remove('training-result-wait','training-result-great');
+            if (onComplete) onComplete();
+        }, duration);
     },
     showEffectPop: (card) => {
         const el = document.createElement('div');
@@ -1563,7 +1653,18 @@ window.onload = () => {
     const overlay = document.getElementById('transition-overlay');
     if(overlay) overlay.style.opacity = '0';
     UI.updateStartMeta();
+    if (RunStorage.restore()) UI.resumeSavedRun();
 };
+
+setInterval(() => {
+    if (!State.isTransitioning && !State.battle.processing) RunStorage.save();
+}, 1200);
+window.addEventListener('beforeunload', () => {
+    if (!State.isTransitioning && !State.battle.processing) RunStorage.save();
+});
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && !State.isTransitioning && !State.battle.processing) RunStorage.save();
+});
 
 window.addEventListener('resize', UI.updateViewportMode, { passive:true });
 window.addEventListener('orientationchange', () => setTimeout(UI.updateViewportMode, 120), { passive:true });
