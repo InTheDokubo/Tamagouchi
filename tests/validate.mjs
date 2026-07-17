@@ -18,12 +18,15 @@ for (const card of CARDS_DB) {
     if (card.add_action && ['str_up','int_up','both_up','maxhp_up'].includes(card.effect) && !card.exhaust) fail(`Repeatable free permanent buff: ${card.id}`);
     if (!SECRET_MOD_BY_CARD[card.id]) fail(`Card has no tailored secret modification: ${card.id}`);
     if (SECRET_MOD_BY_CARD[card.id] === 'rebirth' && (card.draw || card.add_action)) fail(`Unsafe rebirth loop on ${card.id}`);
+    if (card.self_dmg && !card.desc.includes('HP1未満にならない')) fail(`Recoil safety is not documented on ${card.id}`);
 }
 const unknownSecretCards = Object.keys(SECRET_MOD_BY_CARD).filter(id => !ids.includes(id));
 if (unknownSecretCards.length) fail(`Secret modifications reference unknown cards: ${unknownSecretCards.join(', ')}`);
 if (Object.keys(SECRET_MOD_BY_CARD).length !== CARDS_DB.length) fail('Secret modification map must cover every card exactly once');
 const cheer = CARDS_DB.find(card => card.id === 'cheer');
-if (cheer.draw || cheer.limit !== 1) fail('Cheer must not remain a free draw engine');
+if (cheer.val !== 1 || cheer.effect !== 'str_up' || cheer.redraw !== 2 || !cheer.add_action || !cheer.exhaust || cheer.limit !== 1) {
+    fail('Cheer must grant +1 attack, replace the hand with two bonus draws, refund its action, exhaust, and be limited to one copy');
+}
 
 if (CARDS_DB.length < 60) fail(`Expected a broad card pool, found ${CARDS_DB.length}`);
 for (const type of validPools) {
@@ -34,6 +37,12 @@ if (CONSTANTS.COST_REMOVE >= CONSTANTS.COST_BUY) fail('Deck removal should remai
 
 const html = fs.readFileSync(new URL('../root/index.html', import.meta.url), 'utf8');
 const script = fs.readFileSync(new URL('../root/js/script.js', import.meta.url), 'utf8');
+if ([...script.matchAll(/State\.hp\s*-=\s*card\.self_dmg/g)].length) fail('Card recoil must use the nonlethal shared handler');
+if ((script.match(/反動ではHP1未満にならない/g) || []).length < 2) fail('Upgraded recoil cards must retain their nonlethal description');
+const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+const undocumentedCards = CARDS_DB.filter(card => !readme.includes(`| ${card.name} |`));
+if (undocumentedCards.length) fail(`Cards missing from README: ${undocumentedCards.map(card => card.id).join(', ')}`);
+if (!readme.includes('魔力循環') || !readme.includes('30%')) fail('README must explain the Magic Circulation trait and its activation rate');
 const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
 const referencedIds = new Set([...script.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g)].map(match => match[1]));
 const missingIds = [...referencedIds].filter(id => !htmlIds.has(id));

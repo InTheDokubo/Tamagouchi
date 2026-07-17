@@ -525,6 +525,19 @@ const Game = {
         return 1;
     },
 
+    applyRecoilDamage: (amount) => {
+        const damage = Math.min(Math.max(0, State.hp - 1), Math.max(0, amount));
+        State.hp -= damage;
+        if (damage > 0) {
+            UI.combatNumber(damage, 'hurt', 'player-battle-avatar');
+            UI.animShake('#game-container');
+            UI.toast(`反動 ${damage} ダメージ`);
+        } else {
+            UI.toast('反動をHP1で耐えた！');
+        }
+        return damage;
+    },
+
     playCardSequence: async (handIndex) => {
         const card = State.battle.hand[handIndex];
         if (!card) return;
@@ -632,10 +645,7 @@ const Game = {
                 UI.toast(`HP燃焼! ${cost}消費`);
             }
             if (card.self_dmg) {
-                State.hp -= card.self_dmg;
-                UI.animShake('#game-container');
-                UI.combatNumber(card.self_dmg, 'hurt', 'player-battle-avatar');
-                UI.toast(`反動 ${card.self_dmg} ダメージ`);
+                Game.applyRecoilDamage(card.self_dmg);
             }
             let totalDealt = 0;
             if (card.hits) {
@@ -664,7 +674,7 @@ const Game = {
             State.battle.magBonus = 0;
             Game.dealDamage(dmg, { kind:'mag', critical: card.rarity === 'rare' || dmg >= State.battle.enemy.maxHp * .25 });
             if (State.battle.echo) { Game.dealDamage(dmg, { kind:'mag', delay:120, critical:true }); State.battle.echo = false; UI.toast(`残響！ ${dmg}追加ダメージ`); }
-            if (card.self_dmg) { State.hp -= card.self_dmg; UI.combatNumber(card.self_dmg, 'hurt', 'player-battle-avatar'); UI.animShake('#game-container'); UI.toast(`反動 ${card.self_dmg} ダメージ`); }
+            if (card.self_dmg) Game.applyRecoilDamage(card.self_dmg);
             if (card.secretMod === 'resonance') { State.battle.magBonus += 4; UI.toast('【秘伝】次の魔法ダメージ+4'); }
             State.battle.combo = comboBefore + 1;
         } else if (card.type === 'heal') {
@@ -751,6 +761,12 @@ const Game = {
         if (card.freeze) State.battle.enemyFrozen = true;
         if (card.thorns) State.battle.thorns += card.thorns;
 
+        if (card.redraw) {
+            const redrawCount = State.battle.hand.length + card.redraw;
+            State.battle.discardPile.push(...State.battle.hand.splice(0));
+            Game.drawCards(redrawCount);
+            UI.toast(`手札を総入れ替え！ さらに${card.redraw}枚ドロー`);
+        }
         if (card.draw) Game.drawCards(card.draw);
         if (card.add_action) State.battle.actionsLeft++;
         if (card.secretMod === 'insight') Game.drawCards(1);
@@ -890,11 +906,11 @@ const Game = {
             if (card.extra === 'execute') main += '。敵HP30%以下なら威力2倍';
             if (card.extra === 'intent_counter') main += '。敵が強攻撃・吸収なら威力2倍＋予告値ブロック';
             if (card.extra === 'drain') main += '。与ダメージの50%回復';
-            if (card.self_dmg) main += `。自分も${card.self_dmg}ダメージ`;
+            if (card.self_dmg) main += `。自分も${card.self_dmg}ダメージ（反動ではHP1未満にならない）`;
         } else if (card.type === 'mag') {
             main = `魔力${pct(card.val)}%ダメージ`;
             if (card.extra === 'bonus_scale') main += '＋蓄積魔法ボーナスの3倍';
-            if (card.self_dmg) main += `。自分も${card.self_dmg}ダメージ`;
+            if (card.self_dmg) main += `。自分も${card.self_dmg}ダメージ（反動ではHP1未満にならない）`;
         } else if (card.type === 'def') {
             if (card.id === 'barrier' || card.id === 'arcane_shield') main = `魔力${pct(card.val)}%分のブロック`;
             else if (card.extra === 'missing_hp_block') main = `ブロック${card.val}＋失ったHPの20%`;
