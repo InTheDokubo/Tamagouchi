@@ -40,12 +40,24 @@ const JOURNEY_EVENTS = [
     { id:'purify', icon:'fa-feather-alt', title:'浄化の風', desc:'デッキの「パンチ」か「防御」を1枚削除。', color:'from-slate-400 to-slate-600' }
 ];
 
+const SECRET_MOD_COST = 100;
+const SECRET_MODS = {
+    rebirth: { name:'輪廻刻印', icon:'fa-arrows-rotate', desc:'「1回のみ」を失い、使用後は捨て札へ戻る。' },
+    rupture: { name:'破砕の型', icon:'fa-burst', desc:'使用するたび、敵へ脆弱を1付与する。' },
+    resonance: { name:'魔力残響', icon:'fa-wave-square', desc:'使用後、次の魔法ダメージへ+4する。' },
+    overflow: { name:'生命変換', icon:'fa-heart-circle-plus', desc:'最大HPを超えた回復量をブロックへ変換する。' },
+    anchor: { name:'不動結界', icon:'fa-anchor', desc:'このカードで得たブロックを次ターンへ持ち越す。' },
+    insight: { name:'先読み術式', icon:'fa-eye', desc:'使用時、さらにカードを1枚引く。' },
+    tempo: { name:'無拍子', icon:'fa-forward-fast', desc:'使用時、行動権を1回復する。' }
+};
+
 // --- 状態管理 (State) ---
 const State = {
     phase: 'start', name: '', playerType: 'hp', turn: 1, maxTurns: 10, bp: 0,
     selectedAction: null, hp: 50, maxHp: 50, str: 5, int: 5, deck: [],
     shopTab: 'upgrade', shopCards: [], isTransitioning: false, rarePity: 0,
     meta: Meta.load(), trainingEvent: null, lastTrainingEvent: null, journeyChoices: [],
+    runStats: { damageDealt:0, damageTaken:0, cardsPlayed:0, totalBattleTurns:0, battles:0 },
     battle: {
         active: false, enemiesDefeated: 0, enemy: null, hand: [], drawPile: [], discardPile: [], exhaustPile: [],
         actionsLeft: 1, actionsNextTurn: 1, drawNextTurn: 0, block: 0, turnCount: 0,
@@ -53,12 +65,12 @@ const State = {
         retainBlock: false, echo: false, immortal: false, enemyWeak: false,
         combo: 0, cardsPlayed: 0, damageThisTurn: 0, lastCardType: null, spellChain: 0,
         enemyVulnerable: 0, enemyBurn: 0, enemyFrozen: false, thorns: 0, playerFrail: false,
-        counterMagic: false, reflectNext: false, pendingFx: 0
+        counterMagic: false, reflectNext: false, pendingFx: 0, lastDrawnUids: [], currentBattleRecorded:false
     }
 };
 
 const RUN_SAVE_KEY = 'ikuseicchi_run_v1';
-const RUN_SAVE_FIELDS = ['phase','name','playerType','turn','maxTurns','bp','hp','maxHp','str','int','deck','shopTab','shopCards','rarePity','trainingEvent','lastTrainingEvent','journeyChoices','avatar','runShardsEarned'];
+const RUN_SAVE_FIELDS = ['phase','name','playerType','turn','maxTurns','bp','hp','maxHp','str','int','deck','shopTab','shopCards','rarePity','trainingEvent','lastTrainingEvent','journeyChoices','avatar','runShardsEarned','runStats'];
 const RunStorage = {
     save() {
         if (State.phase === 'start' || (State.phase === 'battle' && !State.battle.active)) return;
@@ -174,6 +186,7 @@ const Game = {
         State.playerType = Game.tempType || 'hp';
         State.hp = 50; State.maxHp = 50; State.str = 5; State.int = 5; State.turn = 1; State.bp = 0; State.rarePity = 0;
         State.deck = [];
+        State.runStats = { damageDealt:0, damageTaken:0, cardsPlayed:0, totalBattleTurns:0, battles:0 };
         State.selectedAction = null;
         State.isTransitioning = false;
 
@@ -326,12 +339,12 @@ const Game = {
         if (State.turn >= State.maxTurns) {
             State.isTransitioning = true; 
             UI.showCutin({
-                icon: "⚔️", 
-                title: "BATTLE START", 
-                statText: "育成終了！", 
-                costText: "実戦へ",
+                icon: "📈",
+                title: "育成完了！",
+                statText: "成長データを測定中…",
+                costText: "ANALYZING",
                 onComplete: () => {
-                    Game.initBattle();
+                    UI.changeScene('scene-analysis', () => UI.renderGrowthAnalysis());
                 }
             });
         } else {
@@ -342,6 +355,10 @@ const Game = {
     },
 
     // --- BATTLE ---
+    beginBattleFromAnalysis: () => {
+        if (State.phase !== 'training') return;
+        UI.showCutin({ icon:'⚔️', title:'解析完了', statText:`総合評価 ${UI.getGrowthRank().rank}`, costText:'実戦へ', onComplete:() => Game.initBattle() });
+    },
     initBattle: () => {
         State.phase = 'battle';
         State.battle.active = true;
@@ -367,10 +384,10 @@ const Game = {
         const bosses = tier % 5 === 0;
         const elite = !bosses && tier % 3 === 0;
         const archetypes = bosses
-            ? [{ kind:'boss', sprite:'🐲', title:'覇王', hp:1.55, atk:1.15 }]
+            ? [{ kind:'boss', sprite:'🐲', title:'', hp:1.55, atk:1.15 }]
             : elite
-                ? [{ kind:'guardian', sprite:'🗿', title:'鉄壁の', hp:1.42, atk:1.05 }]
-                : [{ kind:'normal', sprite:'👿', title:'', hp:1, atk:1 }, { kind:'brute', sprite:'👹', title:'猛き', hp:1.22, atk:1.15 }, { kind:'trick', sprite:'🧙', title:'妖しき', hp:.9, atk:.92 }];
+                ? [{ kind:'guardian', sprite:'🗿', title:'', hp:1.42, atk:1.05 }]
+                : [{ kind:'normal', sprite:'👿', title:'', hp:1, atk:1 }, { kind:'brute', sprite:'👹', title:'', hp:1.22, atk:1.15 }, { kind:'trick', sprite:'🧙', title:'', hp:.9, atk:.92 }];
         const archetype = archetypes[Math.floor(Math.random() * archetypes.length)];
         const eMaxHp = Math.floor((55 + level * 15 + Math.pow(level, 1.25) * 2.5) * archetype.hp);
         const eAtk = Math.floor((7 + level * 1.35) * archetype.atk);
@@ -424,6 +441,8 @@ const Game = {
         State.battle.retainBlock = false;
         State.battle.processing = false;
         State.battle.selectedHandIndex = null;
+        State.battle.lastDrawnUids = [];
+        State.battle.currentBattleRecorded = false;
         State.battle.combo = 0;
         State.battle.cardsPlayed = 0;
         State.battle.damageThisTurn = 0;
@@ -441,6 +460,7 @@ const Game = {
     shuffle: (array) => array.sort(() => Math.random() - 0.5),
 
     drawCards: (num) => {
+        State.battle.lastDrawnUids = [];
         for(let i=0; i<num; i++) {
             if (State.battle.hand.length >= CONSTANTS.HAND_LIMIT) break;
             if (State.battle.drawPile.length === 0) {
@@ -453,7 +473,9 @@ const Game = {
                 }
             }
             if (State.battle.drawPile.length > 0) {
-                State.battle.hand.push(State.battle.drawPile.pop());
+                const drawn = State.battle.drawPile.pop();
+                State.battle.hand.push(drawn);
+                State.battle.lastDrawnUids.push(drawn.uid);
             }
         }
     },
@@ -467,14 +489,14 @@ const Game = {
         } else {
             Sound.play('select');
             State.battle.selectedHandIndex = index;
-            UI.updateBattle();
+            UI.updateHandSelection();
         }
     },
 
     deselectCard: () => {
         if (State.battle.selectedHandIndex !== null) {
             State.battle.selectedHandIndex = null;
-            UI.updateBattle();
+            UI.updateHandSelection();
         }
     },
 
@@ -560,6 +582,7 @@ const Game = {
         State.battle.pendingFx = 0;
         State.battle.actionsLeft--;
         State.battle.selectedHandIndex = null;
+        State.runStats.cardsPlayed++;
 
         let str = State.str + State.battle.playerTempStr;
         let int = State.int + State.battle.playerTempInt;
@@ -610,6 +633,7 @@ const Game = {
             }
             if (card.extra === 'intent_counter' && ['heavy','drain'].includes(State.battle.enemy.intent)) State.battle.block += Game.incomingDamage();
             if (card.consumeBlock) State.battle.block = 0;
+            if (card.secretMod === 'rupture') { State.battle.enemyVulnerable += 1; UI.toast('【秘伝】脆弱を付与！'); }
         } else if (card.type === 'mag') {
             const storedBonus = State.battle.magBonus;
             let dmg = Math.floor(int * card.val) + storedBonus + State.battle.spellChain * 2;
@@ -618,11 +642,17 @@ const Game = {
             Game.dealDamage(dmg, { kind:'mag', critical: card.rarity === 'rare' || dmg >= State.battle.enemy.maxHp * .25 });
             if (State.battle.echo) { Game.dealDamage(dmg, { kind:'mag', delay:120, critical:true }); State.battle.echo = false; UI.toast(`残響！ ${dmg}追加ダメージ`); }
             if (card.self_dmg) { State.hp -= card.self_dmg; UI.combatNumber(card.self_dmg, 'hurt', 'player-battle-avatar'); UI.animShake('#game-container'); UI.toast(`反動 ${card.self_dmg} ダメージ`); }
+            if (card.secretMod === 'resonance') { State.battle.magBonus += 4; UI.toast('【秘伝】次の魔法ダメージ+4'); }
         } else if (card.type === 'heal') {
             let heal = card.val;
             if (card.extra === 'low_hp_double' && State.hp <= State.maxHp / 2) heal *= 2;
+            const missingHp = State.maxHp - State.hp;
             const actualHeal = Math.min(State.maxHp - State.hp, heal);
             State.hp += actualHeal;
+            if (card.secretMod === 'overflow') {
+                const overflow = Math.max(0, heal - missingHp);
+                if (overflow > 0) { State.battle.block += overflow; UI.combatNumber(overflow,'block','player-battle-avatar'); }
+            }
             UI.combatNumber(actualHeal, 'heal', 'player-battle-avatar'); Sound.play('heal'); UI.burst('player-battle-avatar','#4ade80');
             UI.toast(`HP ${actualHeal} 回復`);
         } else if (card.type === 'def') {
@@ -634,6 +664,7 @@ const Game = {
             if (card.extra === 'revenge_guard') blk = Game.incomingDamage() + Math.floor((State.maxHp - State.hp) * .2);
             if (State.battle.playerFrail) blk = Math.max(1, Math.floor(blk * .75));
             State.battle.block += blk;
+            if (card.secretMod === 'anchor') State.battle.retainBlock = true;
             if (card.extra === 'intent_block') State.battle.counterMagic = card.upgraded ? 45 : 30;
             if (card.extra === 'revenge_guard') State.battle.reflectNext = card.upgraded ? 1.5 : 1;
             UI.combatNumber(blk, 'block', 'player-battle-avatar'); Sound.play('block'); UI.burst('player-battle-avatar','#60a5fa');
@@ -698,6 +729,8 @@ const Game = {
 
         if (card.draw) Game.drawCards(card.draw);
         if (card.add_action) State.battle.actionsLeft++;
+        if (card.secretMod === 'insight') Game.drawCards(1);
+        if (card.secretMod === 'tempo') State.battle.actionsLeft++;
 
         let recycle = false;
         if (!card.exhaust && State.playerType === 'int' && (card.type === 'mag' || card.attr === 'int')) {
@@ -710,7 +743,7 @@ const Game = {
         if (recycle) {
             if (State.battle.hand.length < CONSTANTS.HAND_LIMIT) State.battle.hand.push(card);
             else State.battle.discardPile.push(card);
-        } else if (card.exhaust) {
+        } else if (card.exhaust && card.secretMod !== 'rebirth') {
             State.battle.exhaustPile.push(card);
         } else {
             State.battle.discardPile.push(card);
@@ -749,6 +782,7 @@ const Game = {
         const dealt = Math.min(enemy.hp, finalAmount);
         enemy.hp = Math.max(0, enemy.hp - finalAmount);
         State.battle.damageThisTurn += dealt;
+        State.runStats.damageDealt += dealt;
         UI.hitEnemy(dealt, meta.kind || 'phys', Boolean(meta.critical || vulnerable), meta.delay || 0);
         return dealt;
     },
@@ -859,7 +893,8 @@ const Game = {
         if (card.burn) main += `。炎上${card.burn}を付与`;
         if (card.freeze) main += '。敵の次の行動を封じる';
         if (card.thorns) main += `。反撃${card.thorns}を得る`;
-        return `${main}。${suffix.length ? ` [${suffix.join('/')}]` : ''}`.trim();
+        const secret = card.secretMod && SECRET_MODS[card.secretMod] ? ` 【秘伝・${SECRET_MODS[card.secretMod].name}】${SECRET_MODS[card.secretMod].desc}` : '';
+        return `${main}。${suffix.length ? ` [${suffix.join('/')}]` : ''}${secret}`.trim();
     },
 
     upgradePreview: (card) => {
@@ -987,6 +1022,7 @@ const Game = {
         
         if (actualDmg > 0) {
             State.hp -= actualDmg;
+            State.runStats.damageTaken += actualDmg;
             UI.hitPlayer(actualDmg, enemy.intent === 'heavy');
             UI.toast(`${actualDmg} のダメージを受けた！`);
         } else {
@@ -1021,6 +1057,7 @@ const Game = {
     winBattle: () => {
         if(State.battle.enemy.hp > 0) return; 
         State.battle.processing = true; 
+        Game.recordBattleStats();
         State.battle.enemiesDefeated++;
         const gainedBP = 12 + Math.min(18, State.battle.enemy.level * 2);
         State.bp += gainedBP;
@@ -1032,7 +1069,9 @@ const Game = {
     },
 
     checkBattleProgress: () => {
-        if (State.battle.enemiesDefeated > 0 && State.battle.enemiesDefeated % 5 === 0) {
+        if (State.battle.enemiesDefeated > 0 && State.battle.enemiesDefeated % 10 === 0) {
+            Game.visitSecretMode();
+        } else if (State.battle.enemiesDefeated > 0 && State.battle.enemiesDefeated % 5 === 0) {
             Game.visitShop();
         } else if (State.battle.enemiesDefeated > 0 && State.battle.enemiesDefeated % 3 === 0) {
             Game.showJourneyEvent();
@@ -1040,6 +1079,13 @@ const Game = {
             State.hp = Math.min(State.maxHp, State.hp + 5);
             Game.spawnEnemy();
         }
+    },
+
+    recordBattleStats: () => {
+        if (State.battle.currentBattleRecorded) return;
+        State.battle.currentBattleRecorded = true;
+        State.runStats.totalBattleTurns += State.battle.turnCount + 1;
+        State.runStats.battles++;
     },
 
     showJourneyEvent: () => {
@@ -1066,6 +1112,35 @@ const Game = {
         Sound.play('rare'); UI.toast(`${event.title}の効果を得た！`);
         setTimeout(() => UI.changeScene('scene-battle',() => Game.spawnEnemy()),500);
     },
+
+    getSecretMod: (card) => {
+        if (card.exhaust) return 'rebirth';
+        if (card.type === 'heal') return 'overflow';
+        if (card.type === 'def') return 'anchor';
+        if (card.type === 'phys') return 'rupture';
+        if (card.type === 'mag') return 'resonance';
+        if (card.draw || card.effect === 'next_draw') return 'insight';
+        return 'tempo';
+    },
+    visitSecretMode: () => {
+        State.hp = Math.min(State.maxHp, State.hp + 12);
+        UI.changeScene('scene-secret', () => UI.renderSecretMode());
+        Sound.play('rare');
+    },
+    applySecretMod: (uid) => {
+        const card = State.deck.find(item => item.uid === uid);
+        if (!card || card.secretMod) return;
+        if (State.bp < SECRET_MOD_COST) { UI.toast(`BPが足りません（必要 ${SECRET_MOD_COST}）`); return; }
+        const modKey = Game.getSecretMod(card);
+        State.bp -= SECRET_MOD_COST;
+        card.secretMod = modKey;
+        card.desc = Game.describeCard(card);
+        Sound.play('rare');
+        UI.toast(`${card.name}に「${SECRET_MODS[modKey].name}」を刻んだ！`);
+        UI.renderSecretMode();
+        RunStorage.save();
+    },
+    leaveSecretMode: () => UI.changeScene('scene-battle', () => Game.spawnEnemy()),
 
     // --- SHOP LOGIC ---
     visitShop: () => {
@@ -1143,6 +1218,7 @@ const Game = {
     },
     gameOver: () => {
         if (!State.battle.active) return;
+        Game.recordBattleStats();
         State.battle.active = false;
         State.battle.processing = true;
         const defeated = State.battle.enemiesDefeated;
@@ -1150,6 +1226,10 @@ const Game = {
         State.meta.shards += State.runShardsEarned; Meta.save(State.meta);
         RunStorage.clear();
         document.getElementById('result-score').innerText = State.battle.enemiesDefeated;
+        document.getElementById('result-damage-dealt').innerText = State.runStats.damageDealt.toLocaleString('ja-JP');
+        document.getElementById('result-damage-taken').innerText = State.runStats.damageTaken.toLocaleString('ja-JP');
+        document.getElementById('result-cards-played').innerText = State.runStats.cardsPlayed.toLocaleString('ja-JP');
+        document.getElementById('result-average-turns').innerText = (State.runStats.totalBattleTurns / Math.max(1,State.runStats.battles)).toFixed(1);
         UI.changeScene('scene-result',() => UI.updateMetaResult());
     }
 };
@@ -1182,6 +1262,51 @@ const UI = {
     updateStartMeta: () => {
         const levels = Object.values(State.meta.upgrades).reduce((sum,level)=>sum+level,0);
         document.getElementById('meta-start-summary').innerHTML = levels > 0 ? `<i class="fas fa-star text-yellow-300"></i> 継承LV ${levels} ・ ${State.meta.shards} ✦` : `<i class="fas fa-seedling text-green-200"></i> 継承強化なし ・ ${State.meta.shards} ✦`;
+    },
+    getGrowthRank: () => {
+        const score = State.maxHp / 7 + State.str * 1.7 + State.int * 1.7;
+        const rank = score >= 72 ? 'S' : score >= 58 ? 'A' : score >= 45 ? 'B' : score >= 34 ? 'C' : 'D';
+        return { score, rank };
+    },
+    renderGrowthAnalysis: () => {
+        const statRank = (value, borders) => value >= borders[0] ? '突出' : value >= borders[1] ? '優秀' : value >= borders[2] ? '安定' : '伸びしろあり';
+        const overall = UI.getGrowthRank();
+        document.getElementById('analysis-name').innerText = `${State.name}の10日間の成長記録`;
+        document.getElementById('analysis-hp').innerText = State.maxHp;
+        document.getElementById('analysis-str').innerText = State.str;
+        document.getElementById('analysis-int').innerText = State.int;
+        document.getElementById('analysis-hp-rank').innerText = statRank(State.maxHp,[95,78,65]);
+        document.getElementById('analysis-str-rank').innerText = statRank(State.str,[24,18,12]);
+        document.getElementById('analysis-int-rank').innerText = statRank(State.int,[24,18,12]);
+        document.getElementById('analysis-rank').innerText = overall.rank;
+        document.getElementById('analysis-deck').innerText = State.deck.length;
+        const best = [['最大HP',State.maxHp/7],['攻撃',State.str*1.7],['魔力',State.int*1.7]].sort((a,b)=>b[1]-a[1])[0][0];
+        const rareCount = State.deck.filter(card => card.rarity === 'rare').length;
+        document.getElementById('analysis-comment').innerText = `${best}を軸にした戦いが得意。${rareCount ? `レアカード${rareCount}枚を含む` : '基礎のまとまった'}${State.deck.length}枚デッキで実戦へ。評価${overall.rank}、生存力と攻撃テンポの両方を観測します。`;
+        RunStorage.save();
+    },
+    renderSecretMode: () => {
+        document.getElementById('secret-bp').innerText = State.bp;
+        const list = document.getElementById('secret-card-list');
+        list.innerHTML = '';
+        State.deck.forEach(card => {
+            const modKey = card.secretMod || Game.getSecretMod(card);
+            const mod = SECRET_MODS[modKey];
+            const button = document.createElement('button');
+            button.className = `secret-card text-left rounded-2xl border p-3 md:p-4 ${card.secretMod?'border-fuchsia-300/50 opacity-65':'border-purple-300/20'} disabled:cursor-default`;
+            button.disabled = Boolean(card.secretMod) || State.bp < SECRET_MOD_COST;
+            button.innerHTML = `<div class="flex gap-3 items-start"><div class="w-10 h-10 rounded-xl bg-white/10 grid place-items-center text-fuchsia-200 shrink-0"><i class="fas ${mod.icon}"></i></div><div class="min-w-0 flex-1"><div class="flex justify-between gap-2"><span class="font-black text-sm md:text-base truncate">${card.name}</span><span class="text-[9px] font-black ${card.secretMod?'text-fuchsia-200':'text-yellow-300'} whitespace-nowrap">${card.secretMod?'改造済':`${SECRET_MOD_COST} BP`}</span></div><div class="text-fuchsia-200 font-black text-xs mt-1">${mod.name}</div><div class="text-[10px] md:text-xs text-purple-100 mt-1 leading-relaxed">${mod.desc}</div></div></div>`;
+            if (!button.disabled) button.onclick = () => Game.applySecretMod(card.uid);
+            list.appendChild(button);
+        });
+    },
+    updateHandSelection: () => {
+        const cards = document.querySelectorAll('#hand-container > div');
+        cards.forEach((el,index) => {
+            const selected = State.battle.selectedHandIndex === index;
+            el.classList.toggle('card-selected',selected);
+            el.setAttribute('aria-pressed',selected ? 'true' : 'false');
+        });
     },
     resumeSavedRun: () => {
         const avatar = State.avatar || (State.playerType === 'hp' ? '🛡️' : State.playerType === 'str' ? '🔥' : '🔮');
@@ -1609,6 +1734,8 @@ const UI = {
         document.getElementById('battle-exhaust-count').innerText = State.battle.exhaustPile.length;
         const handCont = document.getElementById('hand-container');
         handCont.innerHTML = '';
+        const drawnUids = new Set(State.battle.lastDrawnUids || []);
+        let drawOrder = 0;
         State.battle.hand.forEach((card, idx) => {
             const el = document.createElement('div');
             const canPlay = State.battle.actionsLeft > 0 && !State.battle.processing;
@@ -1618,18 +1745,22 @@ const UI = {
             if(card.rarity === 'rare') typeColor = 'bg-yellow-50 border-yellow-300 ring-2 ring-yellow-200';
             let selectedClass = "";
             if (State.battle.selectedHandIndex === idx) { selectedClass = "card-selected"; }
-            el.className = `card-face ${card.rarity==='rare'?'rare-card':''} w-24 h-32 md:w-36 md:h-52 bg-white rounded-xl border-b-4 ${typeColor} shadow-xl flex flex-col p-1.5 md:p-2 relative cursor-pointer transition-all duration-200 shrink-0 ${opacity} ${selectedClass}`;
+            const drawnClass = drawnUids.has(card.uid) ? 'card-draw-in' : '';
+            if (drawnClass) el.style.setProperty('--draw-delay',`${drawOrder++ * 70}ms`);
+            el.className = `card-face ${card.rarity==='rare'?'rare-card':''} w-24 h-32 md:w-36 md:h-52 bg-white rounded-xl border-b-4 ${typeColor} shadow-xl flex flex-col p-1.5 md:p-2 relative cursor-pointer transition-all duration-300 shrink-0 ${opacity} ${selectedClass} ${drawnClass}`;
             el.setAttribute('role','button'); el.tabIndex = canPlay ? 0 : -1; el.setAttribute('aria-pressed', State.battle.selectedHandIndex === idx ? 'true' : 'false'); el.setAttribute('aria-label', `${card.name}。${card.desc}`);
             if(canPlay) el.onclick = (e) => Game.handleCardClick(e, idx);
             if(canPlay) el.onkeydown = (e) => { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); Game.handleCardClick(e, idx); } };
             let badges = '';
-            if(card.rarity === 'rare') badges += `<div class="bg-yellow-400 text-slate-900 px-1 md:px-1.5 rounded text-[8px] md:text-[10px] font-bold shadow-sm border border-white whitespace-nowrap">RARE</div>`;
-            if(card.add_action) badges += `<div class="bg-orange-400 text-white px-1 md:px-1.5 rounded text-[8px] md:text-[10px] font-bold shadow-sm border border-white whitespace-nowrap">連撃</div>`;
-            if(card.exhaust) badges += `<div class="bg-purple-600 text-white px-1 md:px-1.5 rounded text-[8px] md:text-[10px] font-bold shadow-sm border border-white whitespace-nowrap">1回</div>`;
+            if(card.rarity === 'rare') badges += `<span class="card-badge bg-yellow-400 text-slate-900" title="レア"><i class="fas fa-star"></i><span class="hidden md:inline">RARE</span></span>`;
+            if(card.add_action) badges += `<span class="card-badge bg-orange-400 text-white" title="続けて行動"><i class="fas fa-forward"></i><span class="hidden md:inline">連撃</span></span>`;
+            if(card.exhaust && card.secretMod !== 'rebirth') badges += `<span class="card-badge bg-purple-600 text-white" title="この戦闘で1回のみ"><i class="fas fa-hourglass-end"></i><span class="hidden md:inline">1回</span></span>`;
+            if(card.secretMod) badges += `<span class="card-badge bg-fuchsia-600 text-white" title="秘伝：${SECRET_MODS[card.secretMod].name}"><i class="fas fa-wand-magic-sparkles"></i><span class="hidden md:inline">秘伝</span></span>`;
             const preview = State.battle.selectedHandIndex === idx ? `<div class="relative z-10 bg-slate-900 text-yellow-300 text-[8px] md:text-[10px] font-black rounded px-1 py-0.5 text-center">${Game.previewCard(card)}</div>` : '';
-            el.innerHTML = `<div class="absolute -top-2 md:-top-3 left-0 right-0 flex justify-center gap-0.5 md:gap-1 z-10 flex-wrap px-1">${badges}</div><div class="flex-1 flex flex-col items-center justify-center mt-1 md:mt-2 overflow-hidden relative z-[1]"><div class="text-2xl md:text-4xl mb-1 md:mb-2 drop-shadow-sm ${card.rarity==='rare' ? 'text-yellow-600' : (card.type==='phys'?'text-red-400':(card.type==='mag'?'text-blue-400':'text-green-400'))}"><i class="fas ${card.icon}"></i></div><div class="font-bold text-center text-[10px] md:text-sm leading-tight mb-1 md:mb-2 w-full truncate ${card.rarity==='rare'?'text-yellow-800':'text-slate-800'}">${card.name}</div><p class="text-[8px] md:text-xs text-center text-slate-500 leading-tight px-0.5 line-clamp-3">${card.desc}</p></div>${preview}`;
+            el.innerHTML = `<div class="card-badge-row absolute -top-2 md:-top-3 left-0 right-0 flex justify-center gap-0.5 md:gap-1 z-10 flex-wrap px-1">${badges}</div><div class="flex-1 flex flex-col items-center justify-center mt-3 md:mt-4 overflow-hidden relative z-[1]"><div class="text-2xl md:text-4xl mb-1 md:mb-2 drop-shadow-sm ${card.rarity==='rare' ? 'text-yellow-600' : (card.type==='phys'?'text-red-400':(card.type==='mag'?'text-blue-400':'text-green-400'))}"><i class="fas ${card.icon}"></i></div><div class="font-bold text-center text-[10px] md:text-sm leading-tight mb-1 md:mb-2 w-full truncate ${card.rarity==='rare'?'text-yellow-800':'text-slate-800'}">${card.name}</div><p class="text-[8px] md:text-xs text-center text-slate-500 leading-tight px-0.5 line-clamp-3">${card.desc}</p></div>${preview}`;
             handCont.appendChild(el);
         });
+        State.battle.lastDrawnUids = [];
         UI.fitBattleHand(handCont, State.battle.hand.length);
     },
     toast: (msg) => {

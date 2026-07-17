@@ -51,17 +51,21 @@ if (!trainingAfter.draft || trainingAfter.choices < 3 || trainingAfter.stat - tr
 await evaluate(`Game.skipDraft(); true`);
 await evaluate(`{ for(let i=0;i<9;i++) Game.advanceTurn(); true }`);
 await wait(1900);
+const analysis = await evaluate(`({visible:!document.getElementById('scene-analysis').classList.contains('hidden'),rank:document.getElementById('analysis-rank').textContent,hp:Number(document.getElementById('analysis-hp').textContent),deck:Number(document.getElementById('analysis-deck').textContent)})`);
+if (!analysis.visible || !analysis.rank || analysis.hp < 1 || analysis.deck < 1) throw new Error(`Growth analysis failed: ${JSON.stringify(analysis)}`);
+await evaluate(`Game.beginBattleFromAnalysis(); true`);
+await wait(1900);
 const battle = await evaluate(`({
     visible: !document.getElementById('scene-battle').classList.contains('hidden'),
     enemy: document.getElementById('enemy-name').textContent,
     enemyHp: document.getElementById('enemy-hp-text').textContent,
     level: document.getElementById('enemy-level').textContent,
     hand: document.getElementById('hand-container').children.length,
-    arena: getComputedStyle(document.getElementById('scene-battle')).getPropertyValue('--arena-accent').trim()
+    arena: getComputedStyle(document.getElementById('scene-battle')).getPropertyValue('--arena-accent').trim(),
+    drawAnimations: document.querySelectorAll('#hand-container > .card-draw-in').length
 })`);
-if (!battle.visible || !battle.enemy || battle.hand < 1 || !battle.arena) throw new Error(`Battle did not initialize: ${JSON.stringify(battle)}`);
-const randomName = battle.enemy.replace(/^(猛き|妖しき|鉄壁の|覇王)/,'').replace(/っち$/,'');
-if ([...randomName].length < 1 || [...randomName].length > 4 || randomName.includes('っ')) throw new Error(`Invalid enemy name: ${battle.enemy}`);
+if (!battle.visible || !battle.enemy || battle.hand < 1 || !battle.arena || battle.drawAnimations < 1) throw new Error(`Battle did not initialize: ${JSON.stringify(battle)}`);
+if (!/^[ぁ-ん]{1,4}っち$/.test(battle.enemy) || /[一-龯]/.test(battle.enemy)) throw new Error(`Invalid enemy name: ${battle.enemy}`);
 
 const hpBefore = Number((battle.enemyHp || '').split('/')[0]);
 await evaluate(`(Array.from(document.querySelectorAll('#hand-container > div')).find(el=>el.className.includes('border-red')) || document.querySelector('#hand-container > div'))?.click(); true`);
@@ -78,10 +82,14 @@ await evaluate(`Game.showJourneyEvent(); true`);
 await wait(760);
 const journey = await evaluate(`({visible:!document.getElementById('scene-event').classList.contains('hidden'),choices:document.getElementById('event-choice-container').children.length})`);
 if (!journey.visible || journey.choices !== 3) throw new Error(`Journey event failed: ${JSON.stringify(journey)}`);
+await evaluate(`Game.visitSecretMode(); true`);
+await wait(760);
+const secret = await evaluate(`({visible:!document.getElementById('scene-secret').classList.contains('hidden'),cards:document.getElementById('secret-card-list').children.length})`);
+if (!secret.visible || secret.cards < 1) throw new Error(`Secret mode failed: ${JSON.stringify(secret)}`);
 await evaluate(`Game.gameOver(); true`);
 await wait(760);
-const retry = await evaluate(`({visible:!document.getElementById('scene-result').classList.contains('hidden'),upgrades:document.getElementById('meta-upgrade-grid').children.length,earned:document.getElementById('result-shards-earned').textContent})`);
-if (!retry.visible || retry.upgrades !== 4 || !retry.earned.includes('+')) throw new Error(`Retry progression failed: ${JSON.stringify(retry)}`);
+const retry = await evaluate(`({visible:!document.getElementById('scene-result').classList.contains('hidden'),upgrades:document.getElementById('meta-upgrade-grid').children.length,earned:document.getElementById('result-shards-earned').textContent,dealt:Number(document.getElementById('result-damage-dealt').textContent.replaceAll(',','')),cards:Number(document.getElementById('result-cards-played').textContent.replaceAll(',','')),turns:Number(document.getElementById('result-average-turns').textContent)})`);
+if (!retry.visible || retry.upgrades !== 4 || !retry.earned.includes('+') || retry.dealt < 1 || retry.cards < 1 || retry.turns <= 0) throw new Error(`Retry progression failed: ${JSON.stringify(retry)}`);
 await evaluate(`Game.returnToStart(true); true`);
 await wait(760);
 const abandoned = await evaluate(`({visible:!document.getElementById('scene-start').classList.contains('hidden'),save:localStorage.getItem('ikuseicchi_run_v1')})`);
