@@ -56,17 +56,41 @@ if ((script.match(/反動ではHP1未満にならない/g) || []).length < 2) fa
 const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
 const undocumentedCards = CARDS_DB.filter(card => !readme.includes(`| ${card.name} |`));
 if (undocumentedCards.length) fail(`Cards missing from README: ${undocumentedCards.map(card => card.id).join(', ')}`);
-if (!readme.includes('魔力循環') || !readme.includes('30%') || !readme.includes('カード1枚につき1戦闘1回まで')) fail('README must explain the Magic Circulation rate and per-card battle limit');
-if (!script.includes('magicCirculatedUids.includes(card.uid)') || !script.includes('magicCirculatedUids.push(card.uid)')) fail('Magic Circulation must be limited to one success per card each battle');
+if (!readme.includes('一時魔力') || !readme.includes('ショップまたは秘伝の改造へ到達すると0')) fail('README must explain temporary mana persistence and reset timing');
+if (!script.includes('State.tempMana += manaGain') || !script.includes('State.tempMana -= manaSpent')) fail('Temporary mana must have explicit gain and spend handling');
+if (!script.includes('visitShop: () => {') || !script.includes('visitSecretMode: () => {') || (script.match(/State\.tempMana = 0/g) || []).length < 3) fail('Temporary mana must reset at run start, shop, and secret mode');
+const barrier = CARDS_DB.find(card => card.id === 'barrier');
+if (barrier.val > 1 || barrier.manaGain !== 2) fail('Barrier must be weakened and serve as a temporary-mana setup card');
+const manaBurst = CARDS_DB.find(card => card.id === 'mana_burst');
+if (manaBurst.extra !== 'temp_mana_burst' || !manaBurst.consumeAllMana || manaBurst.manaCost !== 3) fail('Mana Burst must consume the temporary-mana pool with a minimum cost');
+if (!script.includes("transcribe:{ cost:3") || !script.includes("phase:{ cost:5") || !script.includes("compress:{ cost:8")) fail('All three arcane arts must be implemented with explicit costs');
+if (!script.includes('State.battle.manaAbsorb') || !script.includes("UI.traitActivation('magic','位相転換'")) fail('Phase Shift must nullify an attack with dedicated feedback');
+if (!readme.includes('魔導転写') || !readme.includes('位相転換') || !readme.includes('時間圧縮')) fail('README must document all arcane arts');
+if (CARDS_DB.some(card => card.id === 'absolute_barrier') || readme.includes('| 絶対防御 |')) fail('Absolute Defense must be removed from the card pool and documentation');
+for (const id of ['spark','fireball','frost','grimoire','future_sight']) {
+    if (!['sacrifice_circuit','void_distill','anomaly_formula','paradox_refund','future_clone'].includes(SECRET_MOD_BY_CARD[id])) fail(`Magic card ${id} must use a redesigned secret modification`);
+}
+if (!script.includes("card.secretMod === 'void_distill'") || !script.includes("card.secretMod === 'anomaly_formula'") || !script.includes("card.secretMod === 'future_clone'")) fail('Redesigned magic secret effects must have dedicated runtime behavior');
+if (!script.includes("card.id === 'absolute_barrier'") || !script.includes("item.id === 'barrier'")) fail('Saved Absolute Defense cards must migrate safely to Barrier');
+const bloodSucker = CARDS_DB.find(card => card.id === 'blood_sucker');
+const limitBreak = CARDS_DB.find(card => card.id === 'limit_break');
+const worldTree = CARDS_DB.find(card => card.id === 'world_tree');
+if (bloodSucker.val > 1.8 || bloodSucker.drainRate > .4 || limitBreak.val > 6 || limitBreak.hpCost < 10 || worldTree.val > 20 || worldTree.healRate > .3) fail('Final cross-job rare-card balance adjustments must remain applied');
 if (!script.includes("State.maxHp = 65; State.hp = 65") || !script.includes("Game.addCard('body_press')")) fail('Vitality starter stats and risk card must remain explicit');
 if (!script.includes('Game.spendHp(State.hp * card.hpCostScale)') || !readme.includes('体力型の設計')) fail('Vitality HP-spending identity must be implemented and documented');
 if (!script.includes('Math.ceil(State.maxHp * card.healRate)') || !readme.includes('回復カードは最大HPに対する割合')) fail('Ratio healing must be implemented and documented');
 if (!script.includes('BALANCE_V2_IDS') || !script.includes('applyCardUpgradeValues(card)')) fail('Existing saved cards must migrate to the new balance without losing upgrades');
 if (!script.includes("UI.toast('【特性】連撃の呼吸！ 行動権+1・1枚ドロー')") || !script.includes('State.battle.combo >= 3')) fail('Attack archetype must trigger its once-per-turn combo flow at three hits');
 if (!readme.includes('攻撃型の設計') || !readme.includes('1ターンに1回だけ発動')) fail('Attack archetype design and trait limit must be documented');
+if (!script.includes("State.playerType === 'str' && Math.random() < 0.1") || !script.includes('Math.floor(dmg * 1.5)') || !script.includes("UI.traitActivation('attack','クロスカウンター'")) fail('Attack archetype must dodge and counter at 1.5x power with a dedicated cut-in');
+if (!readme.includes('クロスカウンター') || !readme.includes('10%の確率で完全回避')) fail('Cross Counter must be documented');
 const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
 const referencedIds = new Set([...script.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g)].map(match => match[1]));
 const missingIds = [...referencedIds].filter(id => !htmlIds.has(id));
 if (missingIds.length) fail(`DOM ids referenced but not defined: ${missingIds.join(', ')}`);
+if (!html.includes('id="end-turn-button"') || !html.includes('Game.endPlayerTurn()') || !html.includes('ターンスキップ')) fail('Battle turn skip control must remain visible and connected');
+if (!script.includes('endPlayerTurn: () =>') || !script.includes('Game.endTurn()')) fail('Battle turn skip action must remain implemented');
+const playerPanel = html.match(/<div id="player-panel" class="([^"]+)"/);
+if (!playerPanel || !playerPanel[1].includes('z-[45]') || !playerPanel[1].includes('pointer-events-auto')) fail('Player controls must stay above the hand interaction layer');
 
 console.log(`Validated ${CARDS_DB.length} cards (${CARDS_DB.filter(c => c.rarity === 'rare').length} rare), DOM references, and economy invariants.`);
