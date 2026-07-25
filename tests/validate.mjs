@@ -41,6 +41,7 @@ if (vitalityCards.life_share.extra !== 'hp_sacrifice' || vitalityCards.life_shar
 if (vitalityCards.grand_slam.extra !== 'hp_halve_press' || vitalityCards.grand_slam.extraMult < 2.75) fail('Press must remain the vitality archetype high-risk finisher');
 
 if (CARDS_DB.length < 60) fail(`Expected a broad card pool, found ${CARDS_DB.length}`);
+if (CARDS_DB.some(card => card.id === 'fate_shuffle' || card.effect === 'limit_flow') || CARDS_DB.some(card => card.name === '限界解放')) fail('Limit Release must be completely removed from the card pool');
 const unlockCards = CARDS_DB.filter(card => card.unlockLevel);
 if (unlockCards.length !== 27) fail(`Expected exactly 27 level-unlock cards, found ${unlockCards.length}`);
 if (!unlockCards.some(card => card.rarity === 'rare') || !unlockCards.some(card => card.rarity !== 'rare')) fail('Level progression must unlock both normal and rare cards');
@@ -134,6 +135,7 @@ const missingIds = [...referencedIds].filter(id => !htmlIds.has(id));
 if (missingIds.length) fail(`DOM ids referenced but not defined: ${missingIds.join(', ')}`);
 if (!html.includes('id="end-turn-button"') || !html.includes('Game.endPlayerTurn()') || !html.includes('ターンスキップ')) fail('Battle turn skip control must remain visible and connected');
 if (!script.includes('endPlayerTurn: () =>') || !script.includes('Game.endTurn()')) fail('Battle turn skip action must remain implemented');
+if (script.includes("card.effect === 'limit_flow'") || script.includes('State.battle.limitFlow')) fail('Limit Release runtime engine must be removed');
 const playerPanel = html.match(/<div id="player-panel" class="([^"]+)"/);
 if (!playerPanel || !playerPanel[1].includes('z-[45]') || !playerPanel[1].includes('pointer-events-auto')) fail('Player controls must stay above the hand interaction layer');
 

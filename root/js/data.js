@@ -111,8 +111,6 @@ export const CARDS_DB = [
     { id: 'tiger_rush', name: '百獣連携', type: 'phys', attr: 'str', val: 0.55, hits: 5, draw: 2, add_action: true, exhaust: true, rarity: 'rare', pool: 'str', limit: 1, unlockLevel: 5, desc: '攻撃55%の5連撃。2枚引く。続けて行動。[1回のみ/デッキ1枚まで]', icon: 'fa-paw' },
     { id: 'astral_collapse', name: '禁術・星喰い', type: 'mag', attr: 'int', val: 2, manaCost: 1, consumeAllMana: true, extra: 'mana_scale_burst', manaScale: 0.8, burn: 6, exhaust: true, rarity: 'rare', pool: 'int', limit: 1, unlockLevel: 5, desc: '一時魔力を全消費。魔力200%＋消費1ごとに魔力80%ダメージ、炎上6。[1回のみ/デッキ1枚まで]', icon: 'fa-star-and-crescent' },
     { id: 'lifeline_cannon', name: '不死循環', type: 'skill', attr: 'hp', effect: 'healing_strike', add_action: true, exhaust: true, rarity: 'rare', pool: 'hp', limit: 1, unlockLevel: 5, desc: 'この戦闘中、回復カードで回復した量と同じダメージを敵にも与える。続けて行動。[1回のみ/デッキ1枚まで]', icon: 'fa-heart-pulse' },
-    { id: 'fate_shuffle', name: '限界解放', type: 'skill', attr: 'common', effect: 'limit_flow', draw: 2, add_action: true, exhaust: true, limit: 1, desc: 'この戦闘中、カードを3枚使うたび行動権+1・1枚引く。2枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon: 'fa-infinity' },
-
     { id: 'war_cry', name: '戦神の号令', type: 'buff', attr: 'str', effect: 'str_up', val: 3, draw: 2, add_action: true, exhaust: true, limit: 1, unlockLevel: 6, desc: 'この戦闘中、攻撃+3。2枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon: 'fa-bullhorn' },
     { id: 'time_slice', name: '時空分割', type: 'skill', attr: 'int', effect: 'echo', manaCost: 4, draw: 1, add_action: true, exhaust: true, limit: 1, unlockLevel: 6, desc: '一時魔力4消費。次の魔法をもう一度与える。1枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon: 'fa-clock' },
     { id: 'regenerative_armor', name: '再生装甲', type: 'def', attr: 'hp', val: 14, thorns: 2, add_action: true, exhaust: true, limit: 1, unlockLevel: 6, desc: 'ブロック14。この戦闘中、反撃2。続けて行動。[1回のみ/デッキ1枚まで]', icon: 'fa-shield-cat' },
@@ -145,7 +143,7 @@ const SECRET_MOD_GROUPS = {
     thornward: ['spikes','aegis','shield_bash','regenerative_armor'],
     overflow: ['bandage','rest','second_wind'],
     renewal: ['super_heal','vitality','first_aid','lifeline_cannon','apex_hp'],
-    serenity: ['quick_think','cheer','focus','rage','muscle','god_strength','titan_body','berserker','immortal','limit_break','world_tree','step_in','tailwind','parry','last_stand_slash','blood_shield','fate_shuffle','war_cry','apex_str'],
+    serenity: ['quick_think','cheer','focus','rage','muscle','god_strength','titan_body','berserker','immortal','limit_break','world_tree','step_in','tailwind','parry','last_stand_slash','blood_shield','war_cry','apex_str'],
     insight: ['meditate'],
     tempo: ['prepare','recycle','time_slice'],
     sacrifice_circuit: ['spark','thunder','barrier','arcane_shield'],

@@ -103,7 +103,7 @@ const SECRET_MODS = {
     future_clone: { name:'未来複製', icon:'fa-clone', desc:'各戦闘の初回使用時、秘伝を持たない一回限りの複製を捨て札へ生成する。' }
 };
 
-const BALANCE_V2_IDS = new Set(['bandage','rest','muscle','life_share','body_press','second_wind','iron_will','grand_slam','super_heal','shield_bash','vitality','titan_body','world_tree','rage','multi','quick','draw_slash','feint','flurry','blood_sucker','limit_break','spark','fireball','barrier','thunder','mana_charge','grimoire','future_sight','frost','arcane_shield','overload','scorch','mana_burst','meteor','time_warp','echo_spell','black_hole','absolute_zero','causal_reverse','step_in','mana_drop','first_aid','tailwind','parry','last_stand_slash','mana_ward','blood_shield','tiger_rush','astral_collapse','lifeline_cannon','fate_shuffle','opening_flurry','quick_cast','life_guard','war_cry','time_slice','regenerative_armor','read_blade','prism_guard','pain_return','combo_breaker','ley_resonance','vitality_wave','thousand_fangs','supernova','immortal_rampart','apex_str','apex_int','apex_hp']);
+const BALANCE_V2_IDS = new Set(['bandage','rest','muscle','life_share','body_press','second_wind','iron_will','grand_slam','super_heal','shield_bash','vitality','titan_body','world_tree','rage','multi','quick','draw_slash','feint','flurry','blood_sucker','limit_break','spark','fireball','barrier','thunder','mana_charge','grimoire','future_sight','frost','arcane_shield','overload','scorch','mana_burst','meteor','time_warp','echo_spell','black_hole','absolute_zero','causal_reverse','step_in','mana_drop','first_aid','tailwind','parry','last_stand_slash','mana_ward','blood_shield','tiger_rush','astral_collapse','lifeline_cannon','opening_flurry','quick_cast','life_guard','war_cry','time_slice','regenerative_armor','read_blade','prism_guard','pain_return','combo_breaker','ley_resonance','vitality_wave','thousand_fangs','supernova','immortal_rampart','apex_str','apex_int','apex_hp']);
 const applyCardUpgradeValues = card => {
     card.upgraded = true;
     if (card.val) card.val = parseFloat((card.val * 1.5).toFixed(2));
@@ -125,7 +125,6 @@ const applyCardUpgradeValues = card => {
     if (card.extra === 'combo_cashout') card.comboScale = .5;
     if (card.extra === 'mana_resonance') card.manaScale = .85;
     if (card.extra === 'vitality_wave') { card.scale = .3; card.missingScale = .35; }
-    if (card.id === 'fate_shuffle') card.redraw += 1;
     if ((card.effect === 'echo' || card.effect === 'immortal' || ['causal_reverse','revenge_fortress'].includes(card.id)) && !card.draw) card.draw = 1;
 };
 
@@ -143,7 +142,7 @@ const State = {
         retainBlock: false, echo: false, immortal: false, enemyWeak: false,
         combo: 0, cardsPlayed: 0, damageThisTurn: 0, lastCardType: null, spellChain: 0,
         enemyVulnerable: 0, enemyBurn: 0, enemyFrozen: false, thorns: 0, playerFrail: false,
-        counterMagic: false, reflectNext: false, manaAbsorb: false, pendingManaRefund: 0, secretClonedUids: [], arcaneArtsUsed: [], pendingFx: 0, lastDrawnUids: [], magicCirculatedUids: [], strFlowTriggered: false, tigerForm:false, manaForge:false, manaReactor:false, secondHeart:false, bloodPact:false, healingStrike:false, chainArt:false, chainUsedThisTurn:false, breakthrough:false, limitFlow:false, flowCount:0, hpSpentThisTurn:0, currentBattleRecorded:false
+        counterMagic: false, reflectNext: false, manaAbsorb: false, pendingManaRefund: 0, secretClonedUids: [], arcaneArtsUsed: [], pendingFx: 0, lastDrawnUids: [], magicCirculatedUids: [], strFlowTriggered: false, tigerForm:false, manaForge:false, manaReactor:false, secondHeart:false, bloodPact:false, healingStrike:false, chainArt:false, chainUsedThisTurn:false, breakthrough:false, hpSpentThisTurn:0, currentBattleRecorded:false
     }
 };
 
@@ -202,6 +201,10 @@ const RunStorage = {
             };
             State.deck.forEach(migrateCard);
             ['hand','drawPile','discardPile','exhaustPile'].forEach(key => (State.battle[key] || []).forEach(migrateCard));
+            State.deck = State.deck.filter(card => card.id !== 'fate_shuffle');
+            ['hand','drawPile','discardPile','exhaustPile'].forEach(key => {
+                State.battle[key] = (State.battle[key] || []).filter(card => card.id !== 'fate_shuffle');
+            });
             return true;
         } catch (_) {
             localStorage.removeItem(RUN_SAVE_KEY);
@@ -617,7 +620,7 @@ const Game = {
         State.battle.tigerForm = false; State.battle.manaForge = false; State.battle.manaReactor = false;
         State.battle.secondHeart = false; State.battle.bloodPact = false; State.battle.healingStrike = false;
         State.battle.chainArt = false; State.battle.chainUsedThisTurn = false; State.battle.breakthrough = false;
-        State.battle.limitFlow = false; State.battle.flowCount = 0; State.battle.hpSpentThisTurn = 0;
+        State.battle.hpSpentThisTurn = 0;
         State.battle.processing = false;
         Game.rollEnemyIntent();
         UI.setArena(archetype.kind);
@@ -999,8 +1002,6 @@ const Game = {
                 State.battle.bloodPact = card.upgraded ? 1.25 : 1; UI.toast('血の盟約！ HP消費を全て装甲へ');
             } else if (card.effect === 'healing_strike') {
                 State.battle.healingStrike = card.upgraded ? 1.5 : 1; UI.toast('不死循環！ 回復が敵を蝕む');
-            } else if (card.effect === 'limit_flow') {
-                State.battle.limitFlow = card.upgraded ? 2 : 3; State.battle.flowCount = 0; UI.toast(`限界解放！ ${State.battle.limitFlow}枚ごとに行動継続`);
             } else if (card.effect === 'apex_str') {
                 State.battle.playerTempStr += card.upgraded ? 7 : 5;
                 State.battle.tigerForm = card.upgraded ? 3 : 2;
@@ -1069,10 +1070,6 @@ const Game = {
         }
         if (card.draw) Game.drawCards(card.draw);
         if (card.add_action) State.battle.actionsLeft++;
-        if (State.battle.limitFlow && card.effect !== 'limit_flow') {
-            State.battle.flowCount++;
-            if (State.battle.flowCount % State.battle.limitFlow === 0) { State.battle.actionsLeft++; Game.drawCards(1); UI.toast('【限界解放】行動権+1・1枚ドロー'); }
-        }
         if (card.secretMod === 'insight') Game.drawCards(1);
         if (card.secretMod === 'tempo') State.battle.actionsLeft++;
         if (card.secretMod === 'serenity') State.battle.block += 6;
@@ -1324,7 +1321,6 @@ const Game = {
                 mana_reactor:'ターン開始時に一時魔力+1',
                 blood_pact:'HP消費によるブロック変換率を100%にする',
                 healing_strike:'回復カードの実回復量と同じダメージを与える',
-                limit_flow:'カード3枚ごとに行動権+1・1枚ドロー',
                 apex_str:'攻撃+5、コンボ開始値2、各ターン最初の物理攻撃を80%で追撃',
                 apex_int:'一時魔力獲得+2、ターン開始時一時魔力+2',
                 apex_hp:'最大HP30%回復、HP消費を125%ブロック化、消費HP75%をターン終了時に回復',
@@ -1363,8 +1359,7 @@ const Game = {
         if (card.extra === 'hp_sacrifice_blast') changes.push('消費22%→18% / 威力3.4→4.2倍');
         if (card.extra === 'hp_sacrifice_block') changes.push('消費12%→10% / ブロック2.5→3.2倍');
         if (card.extra === 'missing_hp_damage') changes.push('失ったHP倍率 25%→35%');
-        if (card.id === 'fate_shuffle') changes.push(`追加ドロー ${card.redraw}→${card.redraw+1}`);
-        const engineUpgrade = { tiger_form:'コンボ開始 1→2', mana_forge:'追加魔力 +1→+2', second_heart:'HP還元 50%→75%', breakthrough:'次のダメージ 1.5→1.8倍', block_conversion:'変換効率 ブロック5→4ごと', chain_art:'追撃 60%→80%', mana_reactor:'毎ターン魔力 +1→+2', blood_pact:'装甲変換 100%→125%', healing_strike:'回復ダメージ 100%→150%', limit_flow:'発動間隔 3枚→2枚', apex_str:'攻撃+5→+7 / コンボ2→3 / 追撃80%→100%', apex_int:'魔力獲得・毎ターン +2→+3', apex_hp:'回復30%→45% / 装甲125%→150% / HP還元75%→100%' };
+        const engineUpgrade = { tiger_form:'コンボ開始 1→2', mana_forge:'追加魔力 +1→+2', second_heart:'HP還元 50%→75%', breakthrough:'次のダメージ 1.5→1.8倍', block_conversion:'変換効率 ブロック5→4ごと', chain_art:'追撃 60%→80%', mana_reactor:'毎ターン魔力 +1→+2', blood_pact:'装甲変換 100%→125%', healing_strike:'回復ダメージ 100%→150%', apex_str:'攻撃+5→+7 / コンボ2→3 / 追撃80%→100%', apex_int:'魔力獲得・毎ターン +2→+3', apex_hp:'回復30%→45% / 装甲125%→150% / HP還元75%→100%' };
         if (engineUpgrade[card.effect]) changes.push(engineUpgrade[card.effect]);
         if (card.extra === 'maxhp_scale') changes.push('最大HP倍率 30%→40% / 消費10%→8%');
         if (card.extra === 'block_dmg') changes.push('ブロック倍率 1.5→2倍');
