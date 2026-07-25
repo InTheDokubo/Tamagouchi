@@ -32,6 +32,7 @@ const meditate = CARDS_DB.find(card => card.id === 'meditate');
 if (meditate.limit !== 2) fail('Meditate must be limited to two copies per deck');
 const attackCards = Object.fromEntries(CARDS_DB.filter(card => card.attr === 'str').map(card => [card.id,card]));
 if (attackCards.rage.val !== 2 || attackCards.multi.val !== .5 || attackCards.quick.val !== .55 || attackCards.flurry.val !== .5) fail('Attack combo starters must match the tempo redesign');
+if (attackCards.feint.type !== 'skill' || attackCards.feint.val !== undefined || attackCards.feint.vulnerable !== 1 || !attackCards.feint.add_action) fail('Feint must stack vulnerability without counting as an attack');
 const vitalityCards = Object.fromEntries(CARDS_DB.filter(card => card.attr === 'hp').map(card => [card.id,card]));
 if (vitalityCards.bandage.healRate < .18 || vitalityCards.second_wind.healRate < .2 || vitalityCards.iron_will.val < 8) fail('Vitality archetype needs a reliable recovery and defense floor');
 if (vitalityCards.muscle.effect === 'maxhp_up' || vitalityCards.muscle.val !== 0 || vitalityCards.muscle.healRate !== .15) fail('Build Up must heal by ratio without increasing max HP');
@@ -40,6 +41,19 @@ if (vitalityCards.life_share.extra !== 'hp_sacrifice' || vitalityCards.life_shar
 if (vitalityCards.grand_slam.extra !== 'hp_halve_press' || vitalityCards.grand_slam.extraMult < 2.75) fail('Press must remain the vitality archetype high-risk finisher');
 
 if (CARDS_DB.length < 60) fail(`Expected a broad card pool, found ${CARDS_DB.length}`);
+const unlockCards = CARDS_DB.filter(card => card.unlockLevel);
+if (unlockCards.length !== 27) fail(`Expected exactly 27 level-unlock cards, found ${unlockCards.length}`);
+if (!unlockCards.some(card => card.rarity === 'rare') || !unlockCards.some(card => card.rarity !== 'rare')) fail('Level progression must unlock both normal and rare cards');
+if (Math.min(...unlockCards.map(card => card.unlockLevel)) !== 2 || Math.max(...unlockCards.map(card => card.unlockLevel)) !== 10) fail('Card unlocks must span every player level from 2 through 10');
+for (let level=2; level<=10; level++) {
+    const rewards = unlockCards.filter(card => card.unlockLevel === level);
+    if (rewards.length !== 3 || !['str','int','hp'].every(attr => rewards.filter(card => card.attr===attr).length===1)) fail(`Level ${level} must unlock exactly one card for each plan`);
+}
+for (const effect of ['tiger_form','mana_forge','second_heart','chain_art','mana_reactor','blood_pact','healing_strike','apex_str','apex_int','apex_hp']) {
+    if (!unlockCards.some(card => card.effect === effect)) fail(`Missing rule-changing level reward: ${effect}`);
+}
+const vitalityUnlocks = Object.fromEntries(unlockCards.filter(card => card.attr === 'hp').map(card => [card.unlockLevel,card]));
+if (vitalityUnlocks[2]?.effect !== 'second_heart' || vitalityUnlocks[4]?.effect !== 'blood_pact' || vitalityUnlocks[5]?.effect !== 'healing_strike') fail('Vitality level rewards must unlock its HP-spend and healing engines in three stages');
 for (const type of validPools) {
     const rares = CARDS_DB.filter(card => card.rarity === 'rare' && card.pool === type);
     if (rares.length < 5) fail(`Not enough rare cards for ${type}: ${rares.length}`);
@@ -54,6 +68,28 @@ if (!html.includes('.trait-activation.attack') || !html.includes('.trait-activat
 if ([...script.matchAll(/State\.hp\s*-=\s*card\.self_dmg/g)].length) fail('Card recoil must use the nonlethal shared handler');
 if ((script.match(/反動ではHP1未満にならない/g) || []).length < 2) fail('Upgraded recoil cards must retain their nonlethal description');
 const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+for (const effect of ['tiger_form','mana_forge','second_heart','chain_art','mana_reactor','blood_pact','healing_strike','apex_str','apex_int','apex_hp']) {
+    if (!script.includes(`card.effect === '${effect}'`)) fail(`Level reward effect is not implemented: ${effect}`);
+}
+for (const extra of ['combo_cashout','mana_resonance','vitality_wave']) {
+    if (!unlockCards.some(card => card.extra === extra) || !script.includes(`card.extra === '${extra}'`)) fail(`Missing level reward scaling mechanic: ${extra}`);
+}
+if (!readme.includes('| 10 | 極・闘神化 | 極・魔導核 | 極・生命天輪 |')) fail('README must document the complete level 2-10 reward schedule');
+if (!script.includes("State.playerType === 'hp'") || !script.includes("State.battle.bloodPact || .5") || !script.includes('State.maxHp * 0.08')) fail('Vitality buffs must include Blood Armor and stronger regeneration');
+if (!script.includes("State.playerType !== 'hp' && !State.battle.retainBlock") || (script.match(/State\.playerType === 'hp'\) State\.battle\.block = 0/g) || []).length < 2) fail('Vitality block must persist between turns and battles until a five-win checkpoint');
+for (const kind of ['normal','brute','trick','sprout','swarm','guardian','assassin','dragon','phoenix','colossus']) {
+    if (!script.includes(`kind:'${kind}'`)) fail(`Missing enemy archetype: ${kind}`);
+}
+for (const intent of ["e.intent = 'multi'","e.intent = 'heal'","e.intent = 'hex'","e.intent = 'guard'"]) {
+    if (!script.includes(intent)) fail(`Missing varied enemy intent: ${intent}`);
+}
+if (!script.includes('52 + level * 11') || !script.includes('6 + level * .95')) fail('Enemy scaling must use the smoother post-rebalance curve');
+if (!script.includes('triggerEnemyPhase') || !script.includes('ENEMY_AFFIXES')) fail('Enemy phase changes and mutations must be implemented');
+if (!script.includes("State.battle.enemiesDefeated % 2 === 0") || !script.includes("id:'mentor_path'") || !script.includes("id:'altar'")) fail('Journey events must occur frequently and include build-changing choices');
+const journeySource = script.slice(script.indexOf('const JOURNEY_EVENTS'),script.indexOf('const ENEMY_ARCHETYPES'));
+if ((journeySource.match(/\bid:'/g) || []).length < 12) fail('Journey event pool must contain at least twelve distinct choices');
+if (!script.includes("bossReward = ' / 覚醒") || !readme.includes('敵の進化と道中イベント')) fail('Boss awakening rewards and the encounter redesign must be documented');
+if (!readme.includes('血潮の鎧') || !readme.includes('戦闘ルールそのものを変える')) fail('Vitality buffs and progression redesign must be documented');
 const undocumentedCards = CARDS_DB.filter(card => !readme.includes(`| ${card.name} |`));
 if (undocumentedCards.length) fail(`Cards missing from README: ${undocumentedCards.map(card => card.id).join(', ')}`);
 if (!readme.includes('一時魔力') || !readme.includes('ショップまたは秘伝の改造へ到達すると0')) fail('README must explain temporary mana persistence and reset timing');
@@ -80,11 +116,19 @@ if (!script.includes("State.maxHp = 65; State.hp = 65") || !script.includes("Gam
 if (!script.includes('Game.spendHp(State.hp * card.hpCostScale)') || !readme.includes('体力型の設計')) fail('Vitality HP-spending identity must be implemented and documented');
 if (!script.includes('Math.ceil(State.maxHp * card.healRate)') || !readme.includes('回復カードは最大HPに対する割合')) fail('Ratio healing must be implemented and documented');
 if (!script.includes('BALANCE_V2_IDS') || !script.includes('applyCardUpgradeValues(card)')) fail('Existing saved cards must migrate to the new balance without losing upgrades');
+if ((script.match(/Game\.isCardUnlocked\(c\)/g) || []).length < 3) fail('Locked cards must be filtered from shop, normal rewards, and rare rewards');
+if (!script.includes('playerXp') || !script.includes('levelFromXp') || !script.includes('State.runXpEarned = 20 + defeated * 10')) fail('Persistent player experience and level calculation are missing');
 if (!script.includes("UI.toast('【特性】連撃の呼吸！ 行動権+1・1枚ドロー')") || !script.includes('State.battle.combo >= 3')) fail('Attack archetype must trigger its once-per-turn combo flow at three hits');
+if (!script.includes('1 + vulnerableStacks * .5') || !script.includes('State.battle.enemyVulnerable = 0')) fail('Vulnerability must stack without a cap and be consumed all at once by the next attack');
 if (!readme.includes('攻撃型の設計') || !readme.includes('1ターンに1回だけ発動')) fail('Attack archetype design and trait limit must be documented');
 if (!script.includes("State.playerType === 'str' && Math.random() < 0.1") || !script.includes('Math.floor(dmg * 1.5)') || !script.includes("UI.traitActivation('attack','クロスカウンター'")) fail('Attack archetype must dodge and counter at 1.5x power with a dedicated cut-in');
 if (!readme.includes('クロスカウンター') || !readme.includes('10%の確率で完全回避')) fail('Cross Counter must be documented');
 const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
+for (const id of ['result-player-level','result-xp-earned','result-xp-bar','result-unlock-list']) if (!htmlIds.has(id)) fail(`Player progression result UI is missing: ${id}`);
+for (const id of ['deck-viewer','deck-viewer-grid','card-library','card-library-grid','library-progress']) if (!htmlIds.has(id)) fail(`Missing collection UI: ${id}`);
+if (!script.includes('openDeckViewer:') || !script.includes('renderDeckViewer:') || !html.includes("Game.openDeckViewer('draw')") || !html.includes("Game.openDeckViewer('deck')")) fail('Battle and journey screens must expose the deck viewer');
+if (!script.includes('openCardLibrary:') || !script.includes('renderCardLibrary:') || !html.includes('Game.openCardLibrary()')) fail('Title screen card library is not fully connected');
+if (!html.includes('@keyframes titlePalBurst') || !html.includes('title-pal hp') || !html.includes('title-pal str') || !html.includes('title-pal int')) fail('Animated title characters are missing');
 const referencedIds = new Set([...script.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g)].map(match => match[1]));
 const missingIds = [...referencedIds].filter(id => !htmlIds.has(id));
 if (missingIds.length) fail(`DOM ids referenced but not defined: ${missingIds.join(', ')}`);

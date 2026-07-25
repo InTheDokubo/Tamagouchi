@@ -140,6 +140,19 @@
         @keyframes draftReveal { 0%{opacity:0;transform:translateY(35px) rotateY(55deg) scale(.85)} 70%{opacity:1;transform:translateY(-5px) rotateY(0) scale(1.04)} 100%{opacity:1;transform:none} }
         .victory-burst { animation:victoryBurst .75s cubic-bezier(.16,1,.3,1) forwards !important; }
         @keyframes victoryBurst { 25%{transform:scale(1.45) rotate(-10deg);filter:brightness(2)} 65%{transform:scale(.8) rotate(14deg);opacity:.8} 100%{transform:scale(0) rotate(30deg);opacity:0} }
+        .title-character-stage{position:relative;width:min(78vw,330px);height:96px;margin:0 auto .25rem;perspective:500px}
+        .title-egg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:4.5rem;color:#fde047;filter:drop-shadow(0 12px 8px rgba(49,46,129,.35));animation:titleEggPulse 2.4s ease-in-out infinite}
+        .title-pal{position:absolute;left:50%;top:52%;font-size:3.2rem;opacity:0;filter:drop-shadow(0 8px 5px rgba(30,41,59,.35));animation:titlePalBurst 6s cubic-bezier(.16,1,.3,1) infinite}
+        .title-pal.hp{--tx:-105px;--rot:-12deg;animation-delay:0s}.title-pal.str{--tx:0px;--rot:6deg;animation-delay:2s}.title-pal.int{--tx:105px;--rot:12deg;animation-delay:4s}
+        @keyframes titleEggPulse{0%,100%{transform:translate(-50%,-50%) scale(1) rotate(-3deg)}50%{transform:translate(-50%,-58%) scale(1.08) rotate(3deg)}}
+        @keyframes titlePalBurst{0%,6%{opacity:0;transform:translate(-50%,-35%) scale(.1) rotate(0)}14%{opacity:1;transform:translate(calc(-50% + var(--tx)),-70%) scale(1.22) rotate(var(--rot))}23%,72%{opacity:1;transform:translate(calc(-50% + var(--tx)),-58%) scale(1) rotate(var(--rot))}82%,100%{opacity:0;transform:translate(calc(-50% + var(--tx)),-95%) scale(.65) rotate(var(--rot))}}
+        .collection-card{position:relative;min-height:132px;transition:.2s cubic-bezier(.16,1,.3,1)}
+        #card-library-grid{align-content:start;align-items:start;grid-auto-rows:max-content;min-height:0}
+        #card-library-grid .collection-card{height:max-content;overflow:visible}
+        .collection-card-description{overflow-wrap:anywhere;word-break:normal;white-space:normal}
+        .collection-card:not(.locked):hover{transform:translateY(-3px);box-shadow:0 14px 28px rgba(15,23,42,.22)}
+        .collection-card.locked{filter:saturate(.15);opacity:.58;background:linear-gradient(145deg,#334155,#0f172a)!important;color:#cbd5e1!important}
+        .collection-card.locked::after{content:"🔒";position:absolute;right:.55rem;top:.45rem;font-size:1.15rem;filter:none}
         @media (min-width:768px) { .status-chip{font-size:11px;padding:4px 8px}.slash-fx{width:300px}.magic-fx{width:180px} }
         @media (prefers-reduced-motion: reduce) { *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}.battle-sky::before{display:none} }
         @media (max-height:600px) { .enemy-shell{width:64px!important;height:64px!important}.enemy-shell #enemy-sprite{font-size:3.5rem!important}.card-selected{transform:translateY(-18px) scale(1.06)!important}#hand-container>div{height:7.4rem}.player-battle-avatar{font-size:2.7rem!important} }
@@ -219,7 +232,7 @@
         <!-- Start Screen -->
         <div id="scene-start" class="absolute inset-0 z-40 bg-gradient-to-br from-indigo-500 to-purple-600 flex flex-col items-center justify-center p-6 text-white transition-opacity duration-500 overflow-y-auto">
             <div class="mb-4 md:mb-8 text-center float-anim mt-auto md:mt-0">
-                <i class="fas fa-egg text-6xl md:text-7xl mb-2 md:mb-4 text-yellow-300"></i>
+                <div class="title-character-stage" aria-hidden="true"><i class="fas fa-egg title-egg"></i><span class="title-pal hp">🐻</span><span class="title-pal str">🐯</span><span class="title-pal int">🦉</span></div>
                 <h1 class="text-4xl md:text-5xl font-extrabold mb-1 md:mb-2 text-outline tracking-wider">たまごち！<br><span class="text-lg md:text-2xl tracking-normal">～ゆるふわ育成ライフ～</span></h1>
                 <p class="text-sm md:text-lg opacity-90 mt-1">ジョブを選んで、最強の「っち」を育てろ！</p>
                 <div id="meta-start-summary" class="mt-2 inline-flex items-center gap-2 bg-slate-900/25 border border-white/20 rounded-full px-3 py-1 text-[10px] md:text-xs font-bold">継承強化なし</div>
@@ -238,6 +251,7 @@
                     </div>
                 </div>
                 <button onclick="Game.start()" class="w-full bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-black py-3 md:py-4 rounded-xl text-xl md:text-2xl shadow-xl transform transition active:translate-y-1 active:shadow-none border-b-4 border-yellow-600 mt-2">ゲームスタート！</button>
+                <button onclick="Game.openCardLibrary()" class="w-full bg-indigo-950/45 hover:bg-indigo-950/65 text-white font-black py-2.5 md:py-3 rounded-xl border border-white/25 shadow-lg transition"><i class="fas fa-book-open text-yellow-300 mr-2"></i>カード図鑑 <span id="library-progress" class="ml-1 text-[10px] text-indigo-200"></span></button>
             </div>
         </div>
 
@@ -358,11 +372,12 @@
             </div>
             <!-- Enemy Area -->
             <div class="enemy-area absolute top-0 left-0 right-0 h-[45%] flex flex-col items-center justify-center z-10 pt-2 md:pt-4">
-                <div class="absolute top-2 right-2 md:top-4 md:right-4 flex gap-2 md:gap-3 text-[10px] md:text-sm font-bold text-slate-600 bg-white/50 backdrop-blur p-1.5 md:p-2 rounded-lg shadow-sm">
+                <button onclick="event.stopPropagation(); Game.openDeckViewer('draw')" class="absolute top-2 right-2 md:top-4 md:right-4 flex gap-2 md:gap-3 text-[10px] md:text-sm font-bold text-slate-600 hover:text-indigo-700 bg-white/70 hover:bg-white backdrop-blur p-1.5 md:p-2 rounded-lg shadow-sm border border-white/70 transition" aria-label="山札、捨て札、除外札を確認">
+                    <i class="fas fa-book-open text-indigo-500"></i>
                     <div class="flex items-center gap-1"><i class="fas fa-layer-group"></i><span id="battle-deck-count">10</span></div>
                     <div class="flex items-center gap-1"><i class="fas fa-trash-alt"></i><span id="battle-discard-count">0</span></div>
                     <div class="flex items-center gap-1"><i class="fas fa-ban"></i><span id="battle-exhaust-count">0</span></div>
-                </div>
+                </button>
                 <div class="enemy-shell w-20 h-20 md:w-32 md:h-32 mb-1 md:mb-2">
                     <div class="enemy-aura"></div><div class="enemy-ring"></div>
                     <div id="enemy-sprite" class="text-7xl md:text-9xl transition-transform duration-100 drop-shadow-2xl filter hover:brightness-110">👿</div>
@@ -413,6 +428,35 @@
             </div>
         </div>
 
+        <!-- Deck Viewer -->
+        <div id="deck-viewer" class="hidden fixed inset-0 z-[130] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 md:p-6" onclick="if(event.target===this) Game.closeDeckViewer()">
+            <div class="w-full max-w-4xl max-h-[90dvh] bg-gradient-to-br from-slate-800 to-slate-950 text-white rounded-3xl border border-white/15 shadow-2xl flex flex-col overflow-hidden">
+                <div class="flex items-center justify-between gap-3 p-4 md:p-5 border-b border-white/10"><div><div class="text-[9px] font-black tracking-[.3em] text-indigo-300">CARD INVENTORY</div><h2 class="text-xl md:text-3xl font-black"><i class="fas fa-layer-group text-yellow-300 mr-2"></i>デッキ確認</h2></div><button onclick="Game.closeDeckViewer()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-xl" aria-label="閉じる"><i class="fas fa-xmark"></i></button></div>
+                <div id="deck-viewer-tabs" class="grid grid-cols-4 gap-1.5 p-3 border-b border-white/10 bg-slate-950/30">
+                    <button data-deck-tab="deck" onclick="Game.setDeckViewerTab('deck')" class="deck-view-tab rounded-lg py-2 text-xs font-black">全デッキ</button>
+                    <button data-deck-tab="draw" onclick="Game.setDeckViewerTab('draw')" class="deck-view-tab rounded-lg py-2 text-xs font-black">山札</button>
+                    <button data-deck-tab="discard" onclick="Game.setDeckViewerTab('discard')" class="deck-view-tab rounded-lg py-2 text-xs font-black">捨て札</button>
+                    <button data-deck-tab="exhaust" onclick="Game.setDeckViewerTab('exhaust')" class="deck-view-tab rounded-lg py-2 text-xs font-black">除外札</button>
+                </div>
+                <div class="flex items-center justify-between px-4 pt-3"><p id="deck-viewer-caption" class="text-xs text-slate-300"></p><span id="deck-viewer-count" class="text-xs font-black bg-white/10 rounded-full px-3 py-1">0枚</span></div>
+                <div id="deck-viewer-grid" class="flex-1 overflow-y-auto custom-scroll grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 p-4"></div>
+            </div>
+        </div>
+
+        <!-- Card Library -->
+        <div id="card-library" class="hidden fixed inset-0 z-[135] bg-indigo-950/90 backdrop-blur-xl flex items-center justify-center p-3 md:p-6" onclick="if(event.target===this) Game.closeCardLibrary()">
+            <div class="w-full max-w-6xl max-h-[92dvh] bg-gradient-to-br from-indigo-900 via-slate-900 to-purple-950 text-white rounded-3xl border border-yellow-200/20 shadow-2xl flex flex-col overflow-hidden">
+                <div class="flex items-center justify-between gap-3 p-4 md:p-6 border-b border-white/10"><div><div class="text-[9px] font-black tracking-[.3em] text-yellow-300">CARD COLLECTION</div><h2 class="text-xl md:text-3xl font-black"><i class="fas fa-book-open text-yellow-300 mr-2"></i>カード図鑑</h2><p id="library-caption" class="text-[10px] md:text-xs text-indigo-200 mt-1"></p></div><button onclick="Game.closeCardLibrary()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-xl" aria-label="閉じる"><i class="fas fa-xmark"></i></button></div>
+                <div class="grid grid-cols-4 gap-1.5 p-3 border-b border-white/10 bg-slate-950/25">
+                    <button data-library-tab="common" onclick="Game.setCardLibraryTab('common')" class="library-tab rounded-lg py-2 text-xs font-black">共通</button>
+                    <button data-library-tab="hp" onclick="Game.setCardLibraryTab('hp')" class="library-tab rounded-lg py-2 text-xs font-black">体力</button>
+                    <button data-library-tab="str" onclick="Game.setCardLibraryTab('str')" class="library-tab rounded-lg py-2 text-xs font-black">攻撃</button>
+                    <button data-library-tab="int" onclick="Game.setCardLibraryTab('int')" class="library-tab rounded-lg py-2 text-xs font-black">魔力</button>
+                </div>
+                <div id="card-library-grid" class="flex-1 min-h-0 overflow-y-auto custom-scroll grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 p-4 md:p-5"></div>
+            </div>
+        </div>
+
         <!-- Growth Analysis -->
         <div id="scene-analysis" class="hidden absolute inset-0 z-[58] bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 text-white flex flex-col items-center justify-center p-4 md:p-8 overflow-y-auto custom-scroll">
             <div class="text-center mb-4 md:mb-7"><div class="text-4xl md:text-6xl mb-2">📊</div><div class="text-[10px] md:text-xs font-black tracking-[.35em] text-cyan-300">GROWTH ANALYSIS</div><h2 class="text-2xl md:text-4xl font-black text-outline mt-1">育成結果を解析</h2><p id="analysis-name" class="text-indigo-200 text-sm md:text-lg mt-1"></p></div>
@@ -446,6 +490,7 @@
 
         <!-- Journey Event -->
         <div id="scene-event" class="hidden absolute inset-0 top-14 md:top-16 z-[55] bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex flex-col items-center justify-center p-4 md:p-8 text-white overflow-y-auto custom-scroll">
+            <button onclick="Game.openDeckViewer('deck')" class="absolute top-3 right-3 md:top-5 md:right-5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl px-3 py-2 text-xs md:text-sm font-black shadow-lg backdrop-blur-sm"><i class="fas fa-layer-group text-yellow-300 mr-1"></i>デッキ確認</button>
             <div class="text-center mb-5 md:mb-8">
                 <div class="text-yellow-300 text-4xl md:text-6xl mb-2 float-anim"><i class="fas fa-compass"></i></div>
                 <h2 class="text-2xl md:text-4xl font-black text-outline">道中イベント</h2>
@@ -461,6 +506,12 @@
                 <h2 id="result-title" class="text-2xl md:text-4xl font-bold mb-2">ちからつきた…</h2>
                 <div class="flex items-baseline justify-center gap-2"><span class="text-sm md:text-lg opacity-70">撃破</span><div id="result-score" class="text-4xl md:text-6xl font-black text-yellow-400">3</div><div class="text-lg text-slate-400 font-bold">体</div></div>
                 <div class="mt-2 inline-flex items-center gap-2 bg-indigo-500/20 border border-indigo-400/40 rounded-full px-4 py-1.5"><span class="text-indigo-200 text-xs">獲得したきらめき</span><span id="result-shards-earned" class="font-black text-yellow-300">+0 ✦</span><span class="text-slate-400 text-xs">所持</span><span id="result-shards-total" class="font-black">0</span></div>
+            </div>
+            <div id="result-level-panel" class="w-full max-w-3xl bg-gradient-to-r from-indigo-950/90 via-violet-900/80 to-indigo-950/90 border border-violet-300/30 rounded-2xl p-3 md:p-4 mb-4 shadow-xl">
+                <div class="flex items-center justify-between gap-3"><div><div class="text-[10px] text-violet-200 font-bold">PLAYER LEVEL</div><div class="flex items-baseline gap-2"><span class="text-sm text-white/70">Lv.</span><span id="result-player-level" class="text-3xl md:text-4xl font-black text-yellow-300">1</span><span id="result-level-up" class="hidden text-xs font-black text-pink-200 bg-pink-500/25 border border-pink-300/30 rounded-full px-2 py-1">LEVEL UP!</span></div></div><div class="text-right"><div class="text-[10px] text-violet-200">獲得EXP</div><div id="result-xp-earned" class="text-xl md:text-2xl font-black text-cyan-300">+0</div></div></div>
+                <div class="mt-2 h-3 bg-slate-950/70 rounded-full overflow-hidden border border-white/10"><div id="result-xp-bar" class="h-full bg-gradient-to-r from-cyan-400 via-indigo-400 to-pink-400 transition-all duration-1000" style="width:0%"></div></div>
+                <div class="flex justify-between text-[9px] text-slate-300 mt-1"><span id="result-xp-progress">0 EXP</span><span id="result-xp-next">NEXT 60</span></div>
+                <div id="result-unlocks" class="hidden mt-3 border-t border-white/10 pt-3"><div class="text-xs font-black text-yellow-200 mb-2"><i class="fas fa-lock-open mr-1"></i>新しいカードを解放！</div><div id="result-unlock-list" class="flex flex-wrap gap-2"></div></div>
             </div>
             <div class="w-full max-w-3xl grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
                 <div class="bg-red-500/10 border border-red-400/20 rounded-xl p-2.5 text-center"><div class="text-[9px] text-red-200">与えたダメージ</div><div id="result-damage-dealt" class="text-lg md:text-2xl font-black text-red-300">0</div></div>

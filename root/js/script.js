@@ -1,6 +1,7 @@
 import { CONSTANTS, ACTION_DATA, CARDS_DB, HIRAGANA, SECRET_MOD_BY_CARD } from './data.js';
 
 const MULTI_HIT_INTERVAL = 145;
+const MAX_PLAYER_LEVEL = 50;
 
 const META_UPGRADES = {
     vitality: { name:'生命の殻', icon:'fa-heart', color:'text-green-300', desc:'初期最大HP +5', max:5 },
@@ -10,13 +11,23 @@ const META_UPGRADES = {
 };
 
 const Meta = {
+    xpForLevel(level) {
+        const steps = Math.max(0, level - 1);
+        return 60 * steps + 25 * steps * Math.max(0, steps - 1);
+    },
+    levelFromXp(xp) {
+        let level = 1;
+        while (level < MAX_PLAYER_LEVEL && xp >= this.xpForLevel(level + 1)) level++;
+        return level;
+    },
     load() {
         try {
             const saved = JSON.parse(localStorage.getItem('ikuseicchi_meta') || '{}');
             const upgrades = {};
             Object.entries(META_UPGRADES).forEach(([key,definition]) => { upgrades[key] = Math.min(definition.max,Math.max(0,Math.floor(Number(saved.upgrades?.[key])||0))); });
-            return { shards:Math.max(0,Math.floor(Number(saved.shards)||0)), upgrades };
-        } catch (_) { return { shards:0, upgrades:{vitality:0,power:0,wisdom:0,fortune:0} }; }
+            const playerXp = Math.max(0,Math.floor(Number(saved.playerXp)||0));
+            return { shards:Math.max(0,Math.floor(Number(saved.shards)||0)), playerXp, playerLevel:this.levelFromXp(playerXp), upgrades };
+        } catch (_) { return { shards:0, playerXp:0, playerLevel:1, upgrades:{vitality:0,power:0,wisdom:0,fortune:0} }; }
     },
     save(data) { try { localStorage.setItem('ikuseicchi_meta',JSON.stringify(data)); } catch (_) {} },
     cost(key, data) { return 4 + (data.upgrades[key] || 0) * 4; }
@@ -39,7 +50,38 @@ const JOURNEY_EVENTS = [
     { id:'treasure', icon:'fa-gem', title:'忘れられた宝箱', desc:'BPを30獲得する。', color:'from-yellow-400 to-amber-600' },
     { id:'shrine', icon:'fa-torii-gate', title:'古い祠', desc:'最大HP+8。現在HPを8失う。', color:'from-purple-500 to-indigo-700' },
     { id:'insight', icon:'fa-lightbulb', title:'戦いのひらめき', desc:'攻撃と魔力を永続的に+1。', color:'from-emerald-500 to-teal-700' },
-    { id:'purify', icon:'fa-feather-alt', title:'浄化の風', desc:'デッキの「パンチ」か「防御」を1枚削除。', color:'from-slate-400 to-slate-600' }
+    { id:'purify', icon:'fa-feather-alt', title:'浄化の風', desc:'デッキの「パンチ」か「防御」を1枚削除。', color:'from-slate-400 to-slate-600' },
+    { id:'camp', icon:'fa-fire', title:'星空の野営', desc:'HPを25%回復し、未強化カード1枚を強化する。', color:'from-rose-500 to-orange-600' },
+    { id:'altar', icon:'fa-hand-fist', title:'試練の祭壇', desc:'現在HPを20%失う代わり、攻撃・魔力+2、BP+20。', color:'from-red-700 to-fuchsia-800', risk:true },
+    { id:'feast', icon:'fa-bowl-food', title:'精霊のごちそう', desc:'HPを全回復し、最大HP+4。', color:'from-lime-500 to-emerald-700' },
+    { id:'mentor_path', icon:'fa-user-ninja', title:'旅する達人', desc:'自分の型のカード1枚を入手し、すぐ強化する。', color:'from-indigo-500 to-violet-700' },
+    { id:'meteorite', icon:'fa-meteor', title:'虹色の隕石', desc:'攻撃+2か魔力+2のどちらかがランダムで上がる。BP+15。', color:'from-sky-500 to-purple-700' },
+    { id:'merchant', icon:'fa-scale-balanced', title:'怪しい交換屋', desc:'基本カード1枚を削除し、BP+35。削除できなければBP+15。', color:'from-amber-600 to-stone-700' }
+];
+
+const ENEMY_ARCHETYPES = [
+    { kind:'normal', sprite:'🐺', label:'狩人', hp:1, atk:1, trait:'追い詰められると攻撃力が上がる' },
+    { kind:'brute', sprite:'👹', label:'豪腕', hp:1.18, atk:1.12, trait:'3ターンごとに強烈な一撃' },
+    { kind:'trick', sprite:'🧙', label:'幻術', hp:.9, atk:.92, trait:'吸収と防御弱化を使い分ける' },
+    { kind:'sprout', sprite:'🌵', label:'再生', hp:1.04, atk:.88, trait:'自己回復しながら粘り強く戦う' },
+    { kind:'swarm', sprite:'🐝', label:'群体', hp:.82, atk:.82, trait:'小さな攻撃を連続で叩き込む' }
+];
+
+const ELITE_ARCHETYPES = [
+    { kind:'guardian', sprite:'🗿', label:'守護者', hp:1.34, atk:1.02, trait:'防御から重い反撃へつなぐ' },
+    { kind:'assassin', sprite:'🥷', label:'暗殺者', hp:1.02, atk:1.22, trait:'素早い連撃と強攻撃を繰り返す' }
+];
+
+const BOSS_ARCHETYPES = [
+    { kind:'dragon', sprite:'🐲', label:'竜王', hp:1.48, atk:1.1, trait:'力を蓄え、強攻撃と連撃を放つ' },
+    { kind:'phoenix', sprite:'🔥', label:'不死鳥', hp:1.32, atk:1, trait:'回復と連撃で戦線を立て直す' },
+    { kind:'colossus', sprite:'🤖', label:'巨神', hp:1.62, atk:.94, trait:'巨大な障壁の後に破壊攻撃を行う' }
+];
+
+const ENEMY_AFFIXES = [
+    { id:'armored', name:'装甲', desc:'戦闘開始時に最大HPの12%をブロック' },
+    { id:'regrowth', name:'再生', desc:'行動前に最大HPの3%を回復' },
+    { id:'frenzy', name:'狂化', desc:'3ターン目以降、攻撃力が上昇' }
 ];
 
 const SECRET_MOD_COST = 100;
@@ -61,11 +103,11 @@ const SECRET_MODS = {
     future_clone: { name:'未来複製', icon:'fa-clone', desc:'各戦闘の初回使用時、秘伝を持たない一回限りの複製を捨て札へ生成する。' }
 };
 
-const BALANCE_V2_IDS = new Set(['bandage','rest','muscle','life_share','body_press','second_wind','iron_will','grand_slam','super_heal','shield_bash','vitality','titan_body','world_tree','rage','multi','quick','draw_slash','feint','flurry','blood_sucker','limit_break','spark','fireball','barrier','thunder','mana_charge','grimoire','future_sight','frost','arcane_shield','overload','scorch','mana_burst','meteor','time_warp','echo_spell','black_hole','absolute_zero','causal_reverse']);
+const BALANCE_V2_IDS = new Set(['bandage','rest','muscle','life_share','body_press','second_wind','iron_will','grand_slam','super_heal','shield_bash','vitality','titan_body','world_tree','rage','multi','quick','draw_slash','feint','flurry','blood_sucker','limit_break','spark','fireball','barrier','thunder','mana_charge','grimoire','future_sight','frost','arcane_shield','overload','scorch','mana_burst','meteor','time_warp','echo_spell','black_hole','absolute_zero','causal_reverse','step_in','mana_drop','first_aid','tailwind','parry','last_stand_slash','mana_ward','blood_shield','tiger_rush','astral_collapse','lifeline_cannon','fate_shuffle','opening_flurry','quick_cast','life_guard','war_cry','time_slice','regenerative_armor','read_blade','prism_guard','pain_return','combo_breaker','ley_resonance','vitality_wave','thousand_fangs','supernova','immortal_rampart','apex_str','apex_int','apex_hp']);
 const applyCardUpgradeValues = card => {
     card.upgraded = true;
     if (card.val) card.val = parseFloat((card.val * 1.5).toFixed(2));
-    if (card.val && (['str_up','int_up','both_up','action_up','maxhp_up','next_draw','berserk','limit_break','world_tree'].includes(card.effect) || (card.type === 'def' && !['barrier','arcane_shield'].includes(card.id)) || card.type === 'heal')) card.val = Math.ceil(card.val);
+    if (card.val && (['str_up','int_up','both_up','action_up','maxhp_up','next_draw','berserk','limit_break','world_tree'].includes(card.effect) || (card.type === 'def' && !['barrier','arcane_shield','mana_ward','prism_guard'].includes(card.id)) || card.type === 'heal')) card.val = Math.ceil(card.val);
     if (card.draw) card.draw += 1;
     if (card.healRate) card.healRate = Math.min(1, parseFloat((card.healRate * 1.5).toFixed(3)));
     if (card.self_dmg) card.self_dmg = Math.max(0, card.self_dmg - 2);
@@ -73,10 +115,17 @@ const applyCardUpgradeValues = card => {
     if (card.thorns) card.thorns = Math.ceil(card.thorns * 1.5);
     card.name += '+';
     if (card.extra === 'hp_sacrifice') { card.scale = .12; card.extraMult = 3.4; }
+    if (card.extra === 'hp_sacrifice_blast') { card.scale = .18; card.extraMult = 4.2; }
+    if (card.extra === 'hp_sacrifice_block') { card.scale = .1; card.extraMult = 3.2; }
+    if (card.extra === 'missing_hp_damage') card.scale = .35;
     if (card.extra === 'maxhp_scale') { card.scale = .4; card.hpCostScale = .08; }
     if (card.extra === 'block_dmg') card.extraMult = 2;
     if (card.extra === 'hp_halve_press') { card.scale = .25; card.extraMult = 3.5; }
-    if (card.extra === 'maxhp_block') card.scale = .65;
+    if (card.extra === 'maxhp_block') card.scale = card.id === 'immortal_rampart' ? .8 : .65;
+    if (card.extra === 'combo_cashout') card.comboScale = .5;
+    if (card.extra === 'mana_resonance') card.manaScale = .85;
+    if (card.extra === 'vitality_wave') { card.scale = .3; card.missingScale = .35; }
+    if (card.id === 'fate_shuffle') card.redraw += 1;
     if ((card.effect === 'echo' || card.effect === 'immortal' || ['causal_reverse','revenge_fortress'].includes(card.id)) && !card.draw) card.draw = 1;
 };
 
@@ -85,7 +134,7 @@ const State = {
     phase: 'start', name: '', playerType: 'hp', turn: 1, maxTurns: 10, bp: 0, tempMana: 0,
     selectedAction: null, hp: 50, maxHp: 50, str: 5, int: 5, deck: [],
     shopTab: 'upgrade', shopCards: [], isTransitioning: false, rarePity: 0,
-    meta: Meta.load(), trainingEvent: null, lastTrainingEvent: null, journeyChoices: [],
+    meta: Meta.load(), trainingEvent: null, lastTrainingEvent: null, journeyChoices: [], runXpEarned:0, runNewUnlocks:[], runLevelBefore:1, deckViewerTab:'deck', libraryTab:'common',
     runStats: { damageDealt:0, damageTaken:0, cardsPlayed:0, totalBattleTurns:0, battles:0 },
     battle: {
         active: false, enemiesDefeated: 0, enemy: null, hand: [], drawPile: [], discardPile: [], exhaustPile: [],
@@ -94,7 +143,7 @@ const State = {
         retainBlock: false, echo: false, immortal: false, enemyWeak: false,
         combo: 0, cardsPlayed: 0, damageThisTurn: 0, lastCardType: null, spellChain: 0,
         enemyVulnerable: 0, enemyBurn: 0, enemyFrozen: false, thorns: 0, playerFrail: false,
-        counterMagic: false, reflectNext: false, manaAbsorb: false, pendingManaRefund: 0, secretClonedUids: [], arcaneArtsUsed: [], pendingFx: 0, lastDrawnUids: [], magicCirculatedUids: [], strFlowTriggered: false, currentBattleRecorded:false
+        counterMagic: false, reflectNext: false, manaAbsorb: false, pendingManaRefund: 0, secretClonedUids: [], arcaneArtsUsed: [], pendingFx: 0, lastDrawnUids: [], magicCirculatedUids: [], strFlowTriggered: false, tigerForm:false, manaForge:false, manaReactor:false, secondHeart:false, bloodPact:false, healingStrike:false, chainArt:false, chainUsedThisTurn:false, breakthrough:false, limitFlow:false, flowCount:0, hpSpentThisTurn:0, currentBattleRecorded:false
     }
 };
 
@@ -126,18 +175,26 @@ const RunStorage = {
                     const uid = card.uid;
                     const wasUpgraded = Boolean(card.upgraded);
                     Object.keys(card).forEach(key => delete card[key]);
-                    Object.assign(card, replacement, { uid, upgraded:false, balanceVersion:4 });
+                    Object.assign(card, replacement, { uid, upgraded:false, balanceVersion:7 });
                     if (wasUpgraded) applyCardUpgradeValues(card);
                 }
-                if (BALANCE_V2_IDS.has(card.id) && card.balanceVersion !== 4) {
+                if (BALANCE_V2_IDS.has(card.id) && card.balanceVersion !== 7) {
                     const definition = CARDS_DB.find(item => item.id === card.id);
                     if (definition) {
                         const preserved = { uid:card.uid, secretMod:card.secretMod, growthApplied:card.growthApplied };
                         const wasUpgraded = Boolean(card.upgraded);
                         Object.keys(card).forEach(key => delete card[key]);
-                        Object.assign(card, definition, preserved, { upgraded:false, balanceVersion:4 });
+                        Object.assign(card, definition, preserved, { upgraded:false, balanceVersion:7 });
                         if (wasUpgraded) applyCardUpgradeValues(card);
                     }
+                }
+                if (card.id === 'feint' && card.type !== 'skill') {
+                    const definition = CARDS_DB.find(item => item.id === 'feint');
+                    const preserved = { uid:card.uid, secretMod:card.secretMod };
+                    const wasUpgraded = Boolean(card.upgraded);
+                    Object.keys(card).forEach(key => delete card[key]);
+                    Object.assign(card, definition, preserved, { upgraded:false, balanceVersion:7 });
+                    if (wasUpgraded) applyCardUpgradeValues(card);
                 }
                 if (card.id === 'cheer') { delete card.draw; card.redraw = 2; card.add_action = true; card.exhaust = true; card.effect = 'str_up'; card.val = 1; card.limit = 1; }
                 if (card.secretMod) card.secretMod = SECRET_MOD_BY_CARD[card.id] || 'serenity';
@@ -285,6 +342,7 @@ const Game = {
         State.playerType = Game.tempType || 'hp';
         State.hp = 50; State.maxHp = 50; State.str = 5; State.int = 5; State.turn = 1; State.bp = 0; State.tempMana = 0; State.rarePity = 0;
         State.deck = [];
+        State.runXpEarned = 0; State.runNewUnlocks = []; State.runLevelBefore = State.meta.playerLevel;
         State.runStats = { damageDealt:0, damageTaken:0, cardsPlayed:0, totalBattleTurns:0, battles:0 };
         State.selectedAction = null;
         State.isTransitioning = false;
@@ -338,6 +396,24 @@ const Game = {
     countCard: (id) => {
         return State.deck.filter(c => c.id === id).length;
     },
+
+    isCardUnlocked: (card) => !card.unlockLevel || State.meta.playerLevel >= card.unlockLevel,
+
+    openDeckViewer: (tab = 'deck') => {
+        State.deckViewerTab = ['deck','draw','discard','exhaust'].includes(tab) ? tab : 'deck';
+        UI.renderDeckViewer();
+        document.getElementById('deck-viewer').classList.remove('hidden');
+    },
+    closeDeckViewer: () => document.getElementById('deck-viewer').classList.add('hidden'),
+    setDeckViewerTab: (tab) => { State.deckViewerTab = tab; UI.renderDeckViewer(); },
+
+    openCardLibrary: () => {
+        State.libraryTab = State.libraryTab || 'common';
+        UI.renderCardLibrary();
+        document.getElementById('card-library').classList.remove('hidden');
+    },
+    closeCardLibrary: () => document.getElementById('card-library').classList.add('hidden'),
+    setCardLibraryTab: (tab) => { State.libraryTab = tab; UI.renderCardLibrary(); },
 
     // --- TRAINING ---
     rollTrainingEvent: (initial = false) => {
@@ -481,16 +557,22 @@ const Game = {
 
         const tier = level + 1;
         const bosses = tier % 5 === 0;
-        const elite = !bosses && tier % 3 === 0;
-        const archetypes = bosses
-            ? [{ kind:'boss', sprite:'🐲', title:'', hp:1.55, atk:1.15 }]
-            : elite
-                ? [{ kind:'guardian', sprite:'🗿', title:'', hp:1.42, atk:1.05 }]
-                : [{ kind:'normal', sprite:'👿', title:'', hp:1, atk:1 }, { kind:'brute', sprite:'👹', title:'', hp:1.22, atk:1.15 }, { kind:'trick', sprite:'🧙', title:'', hp:.9, atk:.92 }];
-        const archetype = archetypes[Math.floor(Math.random() * archetypes.length)];
-        const eMaxHp = Math.floor((55 + level * 15 + Math.pow(level, 1.25) * 2.5) * archetype.hp);
-        const eAtk = Math.floor((7 + level * 1.35) * archetype.atk);
-        State.battle.enemy = { name: `${archetype.title}${nameStr}`, sprite: archetype.sprite, kind: archetype.kind, maxHp: eMaxHp, hp: eMaxHp, block: 0, baseAtk: eAtk, intent: 'atk', intentValue: eAtk, level: tier, strength: 0, boss: bosses, elite };
+        const elite = !bosses && tier % 4 === 0;
+        const archetypes = bosses ? BOSS_ARCHETYPES : elite ? ELITE_ARCHETYPES : ENEMY_ARCHETYPES;
+        const archetype = bosses
+            ? archetypes[Math.floor(level / 5) % archetypes.length]
+            : archetypes[Math.floor(Math.random() * archetypes.length)];
+        // 後半の壁をなだらかにし、敵の個性と行動パターンで難度を作る。
+        const eMaxHp = Math.floor((52 + level * 11 + Math.pow(level, 1.16) * 1.8) * archetype.hp);
+        const eAtk = Math.floor((6 + level * .95 + Math.floor(level / 8)) * archetype.atk);
+        const affix = tier >= 6 && Math.random() < Math.min(.8,.4 + tier * .02)
+            ? ENEMY_AFFIXES[Math.floor(Math.random() * ENEMY_AFFIXES.length)] : null;
+        State.battle.enemy = {
+            name:nameStr, sprite:archetype.sprite, kind:archetype.kind, archetypeLabel:archetype.label, trait:archetype.trait,
+            maxHp:eMaxHp, hp:eMaxHp, block:0, baseAtk:eAtk, intent:'atk', intentValue:eAtk, intentHits:1,
+            level:tier, strength:0, boss:bosses, elite, affix, phaseTriggered:false
+        };
+        if (affix?.id === 'armored') State.battle.enemy.block = Math.max(6,Math.floor(eMaxHp*.12));
         
         State.battle.drawPile = Game.shuffle([...State.deck]);
         State.battle.discardPile = [];
@@ -532,6 +614,10 @@ const Game = {
         State.battle.secretClonedUids = [];
         State.battle.arcaneArtsUsed = [];
         State.battle.strFlowTriggered = false;
+        State.battle.tigerForm = false; State.battle.manaForge = false; State.battle.manaReactor = false;
+        State.battle.secondHeart = false; State.battle.bloodPact = false; State.battle.healingStrike = false;
+        State.battle.chainArt = false; State.battle.chainUsedThisTurn = false; State.battle.breakthrough = false;
+        State.battle.limitFlow = false; State.battle.flowCount = 0; State.battle.hpSpentThisTurn = 0;
         State.battle.processing = false;
         Game.rollEnemyIntent();
         UI.setArena(archetype.kind);
@@ -542,18 +628,21 @@ const Game = {
     startBattleTurn: () => {
         State.battle.actionsLeft = State.battle.actionsNextTurn; 
         State.battle.actionsNextTurn = 1;
-        if (!State.battle.retainBlock) State.battle.block = 0;
+        if (State.playerType !== 'hp' && !State.battle.retainBlock) State.battle.block = 0;
         State.battle.retainBlock = false;
         State.battle.processing = false;
         State.battle.selectedHandIndex = null;
         State.battle.lastDrawnUids = [];
         State.battle.currentBattleRecorded = false;
-        State.battle.combo = 0;
+        State.battle.combo = State.battle.tigerForm || 0;
         State.battle.cardsPlayed = 0;
         State.battle.damageThisTurn = 0;
         State.battle.lastCardType = null;
         State.battle.spellChain = 0;
         State.battle.strFlowTriggered = false;
+        State.battle.chainUsedThisTurn = false;
+        State.battle.hpSpentThisTurn = 0;
+        if (State.battle.manaReactor) { State.tempMana += State.battle.manaReactor; UI.traitActivation('magic','魔力永久機関',`MANA +${State.battle.manaReactor}`); }
         if (State.battle.pendingManaRefund > 0) {
             const refund = State.battle.pendingManaRefund;
             State.battle.pendingManaRefund = 0;
@@ -562,7 +651,7 @@ const Game = {
             UI.toast(`時間を逆行し、一時魔力+${refund}`);
         }
         if (State.playerType === 'hp' && State.battle.turnCount === 0) {
-            const shell = Math.max(6,Math.floor(State.maxHp * .1));
+            const shell = Math.max(8,Math.floor(State.maxHp * .12));
             State.battle.block += shell;
             UI.toast(`【特性】生命の殻 ブロック+${shell}`);
             setTimeout(() => UI.traitActivation('vitality','生命の殻',`BLOCK +${shell}`),100);
@@ -642,6 +731,13 @@ const Game = {
         const cost = Math.min(Math.max(0, State.hp - 1), Math.max(0, Math.floor(requested)));
         State.hp -= cost;
         if (cost > 0) {
+            State.battle.hpSpentThisTurn += cost;
+            if (State.playerType === 'hp') {
+                const armor = Math.max(1, Math.floor(cost * (State.battle.bloodPact || .5)));
+                State.battle.block += armor;
+                UI.combatNumber(armor, 'block', 'player-battle-avatar');
+                UI.traitActivation('vitality',State.battle.bloodPact ? '血の盟約' : '血潮の鎧',`BLOCK +${armor}`);
+            }
             UI.combatNumber(cost, 'hurt', 'player-battle-avatar');
             UI.animShake('#game-container');
             UI.toast(`HPを${cost}消費！`);
@@ -755,6 +851,13 @@ const Game = {
                 const cost = Game.spendHp(State.hp * (card.scale || .15));
                 dmg = Math.floor(cost * (card.extraMult || 2.6));
             }
+            if (card.extra === 'hp_sacrifice_blast') {
+                const cost = Game.spendHp(State.hp * (card.scale || .22));
+                dmg = Math.floor(cost * (card.extraMult || 3.4));
+            }
+            if (card.extra === 'missing_hp_damage') dmg += Math.floor((State.maxHp - State.hp) * (card.scale || .25));
+            if (card.extra === 'combo_cashout') dmg += Math.floor(str * (card.comboScale || .35) * comboBefore);
+            if (card.extra === 'vitality_wave') dmg = Math.floor(State.maxHp*(card.scale||.22) + (State.maxHp-State.hp)*(card.missingScale||.25));
             if (card.extra === 'block_dmg') dmg = Math.floor(State.battle.block * (card.extraMult || 1));
             if (card.extra === 'maxhp_scale') {
                 dmg = Math.floor(State.maxHp * (card.scale || .3));
@@ -780,7 +883,13 @@ const Game = {
                 dmg = Math.floor(dmg * (1 + Math.min(5,comboBefore) * .1));
                 totalDealt = Game.dealDamage(dmg, { kind:'phys', critical: card.rarity === 'rare' || card.extra === 'execute' });
             }
+            if (State.battle.chainArt && !State.battle.chainUsedThisTurn) {
+                State.battle.chainUsedThisTurn = true;
+                Game.dealDamage(Math.floor(dmg * State.battle.chainArt), { kind:'phys', delay:120, critical:true });
+                UI.toast('【連鎖奥義】追撃！');
+            }
             State.battle.combo = comboBefore + (card.hits || 1);
+            if (card.extra === 'combo_cashout') { State.battle.combo = 0; UI.toast(`コンボ${comboBefore}を解放！`); }
             if (card.extra === 'drain') {
                 const drainAmt = Math.min(State.maxHp - State.hp, Math.floor(totalDealt * (card.drainRate || 0.5)));
                 State.hp += drainAmt;
@@ -789,11 +898,12 @@ const Game = {
             }
             if (card.extra === 'intent_counter' && ['heavy','drain'].includes(State.battle.enemy.intent)) State.battle.block += Game.incomingDamage();
             if (card.consumeBlock) State.battle.block = 0;
-            if (card.secretMod === 'rupture') { State.battle.enemyVulnerable += 1; UI.toast('【秘伝】脆弱を付与！'); }
         } else if (card.type === 'mag') {
             const storedBonus = State.battle.magBonus;
             let dmg = Math.floor(int * card.val) + storedBonus;
             if (card.extra === 'temp_mana_burst') dmg += manaSpent * 4;
+            if (card.extra === 'mana_scale_burst') dmg += Math.floor(int * (card.manaScale || .8) * manaSpent);
+            if (card.extra === 'mana_resonance') dmg += Math.floor(int * (card.manaScale || .65) * State.tempMana);
             State.battle.magBonus = 0;
             if (card.secretMod === 'void_distill' && State.battle.enemy.block > 0) {
                 const erased = State.battle.enemy.block;
@@ -817,11 +927,17 @@ const Game = {
             }
             UI.combatNumber(actualHeal, 'heal', 'player-battle-avatar'); Sound.play('heal'); UI.burst('player-battle-avatar','#4ade80');
             UI.toast(`HP ${actualHeal} 回復`);
+            if (State.battle.healingStrike && actualHeal > 0) Game.dealDamage(Math.floor(actualHeal*State.battle.healingStrike), { kind:'phys', critical:actualHeal >= State.battle.enemy.maxHp*.2 });
         } else if (card.type === 'def') {
             let blk = card.val;
             if (card.id === 'barrier' || card.id === 'arcane_shield') blk = Math.floor(int * card.val);
+            if (card.extra === 'temp_mana_block') blk = Math.floor(int * card.val) + State.tempMana * 2;
+            if (card.extra === 'hp_sacrifice_block') {
+                const cost = Game.spendHp(State.hp * (card.scale || .12));
+                blk = Math.floor(cost * (card.extraMult || 2.5));
+            }
             if (card.extra === 'missing_hp_block') blk += Math.floor((State.maxHp - State.hp) * .2);
-            if (card.extra === 'maxhp_block') blk = Math.min(card.upgraded ? 75 : 60, Math.floor(State.maxHp * (card.scale || .5)));
+            if (card.extra === 'maxhp_block') blk = Math.min(card.upgraded ? (card.upgradedBlockCap||75) : (card.blockCap||60), Math.floor(State.maxHp * (card.scale || .5)));
             if (card.extra === 'intent_block') blk = Game.incomingDamage();
             if (card.extra === 'revenge_guard') blk = Game.incomingDamage() + Math.floor((State.maxHp - State.hp) * .2);
             if (State.battle.playerFrail) blk = Math.max(1, Math.floor(blk * .75));
@@ -858,6 +974,50 @@ const Game = {
                 UI.toast(`次ターン追加ドロー`);
             } else if (card.effect === 'mana_cycle') {
                 UI.toast('魔道書を展開！');
+            } else if (card.effect === 'mana_only') {
+                UI.toast('魔力の雫を取り込んだ！');
+            } else if (card.effect === 'draw_flow') {
+                UI.toast('追い風が吹いた！');
+            } else if (card.effect === 'redraw_hand') {
+                UI.toast('運命を選び直した！');
+            } else if (card.effect === 'tiger_form') {
+                State.battle.tigerForm = card.upgraded ? 2 : 1; State.battle.combo = Math.max(State.battle.tigerForm,State.battle.combo); UI.toast('虎の型！ コンボが途切れない');
+            } else if (card.effect === 'mana_forge') {
+                State.battle.manaForge = card.upgraded ? 2 : 1; UI.toast('魔力炉が起動した！');
+            } else if (card.effect === 'second_heart') {
+                State.battle.secondHeart = card.upgraded ? .75 : .5; UI.toast('第二の心臓が脈打つ！');
+            } else if (card.effect === 'breakthrough') {
+                State.battle.breakthrough = card.upgraded ? 1.8 : 1.5; UI.toast(`次の一撃が${State.battle.breakthrough}倍！`);
+            } else if (card.effect === 'block_conversion') {
+                const gain = Math.floor(State.battle.block / (card.upgraded ? 4 : 5)); State.battle.block = 0;
+                State.battle.playerTempStr += gain; State.battle.playerTempInt += gain; UI.toast(`ブロックを力へ変換！ 攻撃・魔力+${gain}`);
+            } else if (card.effect === 'chain_art') {
+                State.battle.chainArt = card.upgraded ? .8 : .6; UI.toast('連鎖奥義を会得！');
+            } else if (card.effect === 'mana_reactor') {
+                State.battle.manaReactor = card.upgraded ? 2 : 1; UI.toast('魔力永久機関が起動！');
+            } else if (card.effect === 'blood_pact') {
+                State.battle.bloodPact = card.upgraded ? 1.25 : 1; UI.toast('血の盟約！ HP消費を全て装甲へ');
+            } else if (card.effect === 'healing_strike') {
+                State.battle.healingStrike = card.upgraded ? 1.5 : 1; UI.toast('不死循環！ 回復が敵を蝕む');
+            } else if (card.effect === 'limit_flow') {
+                State.battle.limitFlow = card.upgraded ? 2 : 3; State.battle.flowCount = 0; UI.toast(`限界解放！ ${State.battle.limitFlow}枚ごとに行動継続`);
+            } else if (card.effect === 'apex_str') {
+                State.battle.playerTempStr += card.upgraded ? 7 : 5;
+                State.battle.tigerForm = card.upgraded ? 3 : 2;
+                State.battle.combo = Math.max(State.battle.combo,State.battle.tigerForm);
+                State.battle.chainArt = card.upgraded ? 1 : .8;
+                UI.traitActivation('attack','極・闘神化',`ATK +${card.upgraded?7:5} / COMBO ${State.battle.tigerForm}`);
+            } else if (card.effect === 'apex_int') {
+                State.battle.manaForge = card.upgraded ? 3 : 2;
+                State.battle.manaReactor = card.upgraded ? 3 : 2;
+                UI.traitActivation('magic','極・魔導核',`FORGE +${State.battle.manaForge} / REACTOR +${State.battle.manaReactor}`);
+            } else if (card.effect === 'apex_hp') {
+                State.battle.bloodPact = card.upgraded ? 1.5 : 1.25;
+                State.battle.secondHeart = card.upgraded ? 1 : .75;
+                const heal = Math.ceil(State.maxHp*(card.upgraded ? .45 : .3));
+                const actualHeal = Math.min(State.maxHp-State.hp,heal); State.hp += actualHeal;
+                UI.combatNumber(actualHeal,'heal','player-battle-avatar');
+                UI.traitActivation('vitality','極・生命天輪',`HEAL ${actualHeal} / CYCLE ON`);
             } else if (card.effect === 'recycle') {
                 State.battle.drawPile.push(...Game.shuffle(State.battle.discardPile.splice(0)));
             } else if (card.effect === 'retain_block') {
@@ -890,6 +1050,7 @@ const Game = {
         if (card.effect === 'weak') State.battle.enemyWeak = true;
         if (card.effect === 'retain_block') State.battle.retainBlock = true;
         if (card.vulnerable) State.battle.enemyVulnerable += card.vulnerable;
+        if (card.secretMod === 'rupture') { State.battle.enemyVulnerable += 1; UI.toast('【秘伝】脆弱を追加！'); }
         if (card.burn) State.battle.enemyBurn += card.burn;
         if (card.freeze) State.battle.enemyFrozen = true;
         if (card.thorns) State.battle.thorns += card.thorns;
@@ -908,6 +1069,10 @@ const Game = {
         }
         if (card.draw) Game.drawCards(card.draw);
         if (card.add_action) State.battle.actionsLeft++;
+        if (State.battle.limitFlow && card.effect !== 'limit_flow') {
+            State.battle.flowCount++;
+            if (State.battle.flowCount % State.battle.limitFlow === 0) { State.battle.actionsLeft++; Game.drawCards(1); UI.toast('【限界解放】行動権+1・1枚ドロー'); }
+        }
         if (card.secretMod === 'insight') Game.drawCards(1);
         if (card.secretMod === 'tempo') State.battle.actionsLeft++;
         if (card.secretMod === 'serenity') State.battle.block += 6;
@@ -915,7 +1080,7 @@ const Game = {
         if (card.secretMod === 'thornward') State.battle.thorns += 2;
         if (card.secretMod === 'renewal') Game.drawCards(1);
         if (card.manaGain) {
-            const manaGain = card.manaGain * (card.secretMod === 'sacrifice_circuit' ? 2 : 1);
+            const manaGain = card.manaGain * (card.secretMod === 'sacrifice_circuit' ? 2 : 1) + (State.battle.manaForge && !['mana_forge','apex_int'].includes(card.effect) ? State.battle.manaForge : 0);
             State.tempMana += manaGain;
             UI.combatNumber(manaGain, 'mana', 'player-battle-avatar');
             UI.toast(`一時魔力 +${manaGain}${card.secretMod === 'sacrifice_circuit'?'（生贄回路）':''}`);
@@ -966,11 +1131,17 @@ const Game = {
         if (!enemy || enemy.hp <= 0) return 0;
         State.battle.pendingFx = Math.max(State.battle.pendingFx || 0, meta.delay || 0);
         let finalAmount = Math.max(0, Math.floor(amount));
-        let vulnerable = false;
-        if (State.battle.enemyVulnerable > 0) {
-            finalAmount = Math.floor(finalAmount * 1.5);
-            State.battle.enemyVulnerable--;
-            vulnerable = true;
+        if (State.battle.breakthrough) {
+            finalAmount = Math.floor(finalAmount * State.battle.breakthrough);
+            State.battle.breakthrough = false;
+            UI.toast(`【突破口】ダメージ${State.battle.breakthrough}倍！`);
+        }
+        const vulnerableStacks = State.battle.enemyVulnerable;
+        if (vulnerableStacks > 0) {
+            const vulnerableMultiplier = 1 + vulnerableStacks * .5;
+            finalAmount = Math.floor(finalAmount * vulnerableMultiplier);
+            State.battle.enemyVulnerable = 0;
+            UI.toast(`脆弱${vulnerableStacks}を全消費！ ダメージ×${vulnerableMultiplier}`);
         }
         const absorbed = Math.min(enemy.block || 0, finalAmount);
         enemy.block = Math.max(0, (enemy.block || 0) - absorbed);
@@ -980,14 +1151,36 @@ const Game = {
         enemy.hp = Math.max(0, enemy.hp - finalAmount);
         State.battle.damageThisTurn += dealt;
         State.runStats.damageDealt += dealt;
-        UI.hitEnemy(dealt, meta.kind || 'phys', Boolean(meta.critical || vulnerable), meta.delay || 0, Boolean(meta.multiHit));
+        UI.hitEnemy(dealt, meta.kind || 'phys', Boolean(meta.critical || vulnerableStacks > 0), meta.delay || 0, Boolean(meta.multiHit));
+        if (dealt > 0) Game.triggerEnemyPhase();
         return dealt;
+    },
+
+    triggerEnemyPhase: () => {
+        const enemy = State.battle.enemy;
+        if (!enemy || enemy.phaseTriggered || enemy.hp <= 0 || enemy.hp > enemy.maxHp*.5) return;
+        enemy.phaseTriggered = true;
+        let message = '戦い方が変化した！';
+        if (['normal','brute','swarm','assassin'].includes(enemy.kind)) {
+            enemy.strength += 2; message = '追い詰められて攻撃力+2！';
+        } else if (enemy.kind === 'trick') {
+            const guard = Math.floor(enemy.maxHp*.1); enemy.block += guard; message = `幻影を展開！ ブロック+${guard}`;
+        } else if (enemy.kind === 'sprout') {
+            const heal = Math.floor(enemy.maxHp*.06); enemy.hp = Math.min(enemy.maxHp,enemy.hp+heal); message = `生命力が活性化！ HP+${heal}`;
+        } else if (enemy.kind === 'guardian') {
+            const guard = Math.floor(enemy.maxHp*.14); enemy.block += guard; message = `守護障壁！ ブロック+${guard}`;
+        } else {
+            const guard = Math.floor(enemy.maxHp*.08); enemy.block += guard; enemy.strength += 2; message = `ボスが本気になった！ 攻撃+2・ブロック+${guard}`;
+        }
+        UI.burst('enemy-sprite','#f97316',14);
+        UI.toast(`【形態変化】${message}`);
     },
 
     incomingDamage: () => {
         const enemy = State.battle.enemy;
-        if (!enemy || !['atk','heavy','drain'].includes(enemy.intent) || State.battle.enemyFrozen) return 0;
-        return State.battle.enemyWeak ? Math.floor(enemy.intentValue * .75) : enemy.intentValue;
+        if (!enemy || !['atk','heavy','drain','multi'].includes(enemy.intent) || State.battle.enemyFrozen) return 0;
+        const amount = enemy.intent === 'multi' ? enemy.intentValue*(enemy.intentHits||1) : enemy.intentValue;
+        return State.battle.enemyWeak ? Math.floor(amount * .75) : amount;
     },
 
     previewCard: (card) => {
@@ -1001,6 +1194,13 @@ const Game = {
                 hpCost = Math.min(Math.max(0,State.hp-1),Math.floor(State.hp*(card.scale||.15)));
                 amount = Math.floor(hpCost * (card.extraMult || 2.6));
             }
+            if (card.extra === 'hp_sacrifice_blast') {
+                hpCost = Math.min(Math.max(0,State.hp-1),Math.floor(State.hp*(card.scale||.22)));
+                amount = Math.floor(hpCost * (card.extraMult || 3.4));
+            }
+            if (card.extra === 'missing_hp_damage') amount += Math.floor((State.maxHp-State.hp)*(card.scale||.25));
+            if (card.extra === 'combo_cashout') amount += Math.floor(str*(card.comboScale||.35)*State.battle.combo);
+            if (card.extra === 'vitality_wave') amount = Math.floor(State.maxHp*(card.scale||.22)+(State.maxHp-State.hp)*(card.missingScale||.25));
             if (card.extra === 'block_dmg') amount = Math.floor(State.battle.block * (card.extraMult || 1));
             if (card.extra === 'maxhp_scale') {
                 amount = Math.floor(State.maxHp * (card.scale || .3));
@@ -1014,12 +1214,15 @@ const Game = {
             if (card.extra === 'intent_counter' && ['heavy','drain'].includes(State.battle.enemy.intent)) amount *= 2;
             const hits = card.hits || 1;
             let enemyBlock = State.battle.enemy.block || 0;
-            let vulnerable = State.battle.enemyVulnerable > 0;
+            let vulnerableStacks = State.battle.enemyVulnerable;
             const hitAmounts = [];
             let total = 0;
             for (let k=0;k<hits;k++) {
                 let hit = Math.floor(amount * (1 + Math.min(5,State.battle.combo + k) * .1));
-                if (vulnerable) { hit = Math.floor(hit * 1.5); vulnerable = false; }
+                if (vulnerableStacks > 0) {
+                    hit = Math.floor(hit * (1 + vulnerableStacks * .5));
+                    vulnerableStacks = 0;
+                }
                 const absorbed = Math.min(enemyBlock,hit); enemyBlock -= absorbed; hit -= absorbed;
                 hitAmounts.push(hit); total += hit;
             }
@@ -1030,6 +1233,8 @@ const Game = {
             let amount = Math.floor(int * card.val) + State.battle.magBonus;
             const previewManaSpent = card.consumeAllMana ? State.tempMana : (card.manaCost || 0);
             if (card.extra === 'temp_mana_burst') amount += previewManaSpent * 4;
+            if (card.extra === 'mana_scale_burst') amount += Math.floor(int*(card.manaScale||.8)*previewManaSpent);
+            if (card.extra === 'mana_resonance') amount += Math.floor(int*(card.manaScale||.65)*State.tempMana);
             const firstHit = State.battle.enemyVulnerable > 0 ? Math.floor(amount * 1.5) : amount;
             const enemyBlock = State.battle.enemy.block || 0;
             const firstTotal = Math.max(0, firstHit - enemyBlock);
@@ -1041,12 +1246,15 @@ const Game = {
             let block = card.val;
             if (card.id === 'barrier') block = Math.floor(int * card.val);
             if (card.id === 'arcane_shield') block = Math.floor(int * card.val);
+            if (card.extra === 'temp_mana_block') block = Math.floor(int * card.val) + State.tempMana * 2;
+            let hpCost = 0;
+            if (card.extra === 'hp_sacrifice_block') { hpCost = Math.min(Math.max(0,State.hp-1),Math.floor(State.hp*(card.scale||.12))); block = Math.floor(hpCost*(card.extraMult||2.5)); }
             if (card.extra === 'missing_hp_block') block += Math.floor((State.maxHp-State.hp)*.2);
-            if (card.extra === 'maxhp_block') block = Math.min(card.upgraded?75:60,Math.floor(State.maxHp*(card.scale||.5)));
+            if (card.extra === 'maxhp_block') block = Math.min(card.upgraded?(card.upgradedBlockCap||75):(card.blockCap||60),Math.floor(State.maxHp*(card.scale||.5)));
             if (card.extra === 'intent_block') block = Game.incomingDamage();
             if (card.extra === 'revenge_guard') block = Game.incomingDamage() + Math.floor((State.maxHp-State.hp)*.2);
             if (State.battle.playerFrail) block = Math.max(1,Math.floor(block*.75));
-            return `ブロック +${block}`;
+            return `ブロック +${block}${hpCost ? ` / HP-${hpCost}` : ''}`;
         }
         if (card.type === 'heal') { const baseHeal = Game.getCardHeal(card); const heal = card.extra==='low_hp_double' && State.hp<=State.maxHp/2 ? baseHeal*2 : baseHeal; return `HP +${Math.min(State.maxHp-State.hp, heal)}（最大HPの${Math.round(card.healRate*100)}%${card.extra==='low_hp_double'&&State.hp<=State.maxHp/2?'×2':''}）`; }
         return '効果を発動・続けてタップ';
@@ -1065,22 +1273,30 @@ const Game = {
         if (card.type === 'phys') {
             if (card.extra === 'hp_scale') main = `攻撃${pct(card.val)}%＋現在HP10%ダメージ`;
             else if (card.extra === 'hp_sacrifice') main = `現在HPを${pct(card.scale || .15)}%消費し、その${card.extraMult || 2.6}倍のダメージ（HP1で止まる）`;
+            else if (card.extra === 'hp_sacrifice_blast') main = `現在HPを${pct(card.scale || .22)}%消費し、その${card.extraMult || 3.4}倍のダメージ（HP1で止まる）`;
             else if (card.extra === 'block_dmg') main = `全ブロックを消費し、その${card.extraMult || 1}倍のダメージ`;
             else if (card.extra === 'maxhp_scale') main = `最大HPの${pct(card.scale || .3)}%ダメージ${card.hpCostScale ? `。現在HPを${pct(card.hpCostScale)}%消費（HP1で止まる）` : ''}`;
             else if (card.extra === 'hp_halve_press') main = `現在HPを${pct(card.scale || .5)}%消費し、その${card.extraMult || 3}倍のダメージ（HP1で止まる）`;
+            else if (card.extra === 'combo_cashout') main = `攻撃${pct(card.val)}%＋現在コンボ1ごとに攻撃${pct(card.comboScale||.35)}%。使用後コンボを0にする`;
+            else if (card.extra === 'vitality_wave') main = `最大HPの${pct(card.scale||.22)}%＋失ったHPの${pct(card.missingScale||.25)}%ダメージ`;
             else main = `攻撃${pct(card.val)}%${card.hits ? `の${card.hits}連撃` : 'ダメージ'}`;
             if (card.extra === 'execute') main += '。敵HP30%以下なら威力2倍';
+            if (card.extra === 'missing_hp_damage') main += `。失ったHPの${pct(card.scale || .25)}%を追加`;
             if (card.extra === 'intent_counter') main += '。敵が強攻撃・吸収なら威力2倍＋予告値ブロック';
             if (card.extra === 'drain') main += `。与ダメージの${pct(card.drainRate || .5)}%回復`;
             if (card.self_dmg) main += `。自分も${card.self_dmg}ダメージ（反動ではHP1未満にならない）`;
         } else if (card.type === 'mag') {
             main = `魔力${pct(card.val)}%ダメージ`;
             if (card.extra === 'temp_mana_burst') main += '＋消費した一時魔力×4ダメージ（最低3必要）';
+            if (card.extra === 'mana_scale_burst') main += `＋消費した一時魔力1ごとに魔力${pct(card.manaScale || .8)}%ダメージ`;
+            if (card.extra === 'mana_resonance') main += `＋現在の一時魔力1ごとに魔力${pct(card.manaScale||.65)}%ダメージ（消費しない）`;
             if (card.self_dmg) main += `。自分も${card.self_dmg}ダメージ（反動ではHP1未満にならない）`;
         } else if (card.type === 'def') {
             if (card.id === 'barrier' || card.id === 'arcane_shield') main = `魔力${pct(card.val)}%分のブロック`;
+            else if (card.extra === 'temp_mana_block') main = `魔力${pct(card.val)}%＋一時魔力の2倍のブロック`;
+            else if (card.extra === 'hp_sacrifice_block') main = `現在HPを${pct(card.scale||.12)}%消費し、その${card.extraMult||2.5}倍のブロック（HP1で止まる）`;
             else if (card.extra === 'missing_hp_block') main = `ブロック${card.val}＋失ったHPの20%`;
-            else if (card.extra === 'maxhp_block') main = `最大HPの${pct(card.scale || .5)}%（最大${card.upgraded?75:60}）ブロック`;
+            else if (card.extra === 'maxhp_block') main = `最大HPの${pct(card.scale || .5)}%（最大${card.upgraded?(card.upgradedBlockCap||75):(card.blockCap||60)}）ブロック`;
             else if (card.extra === 'intent_block') main = `予告ダメージ分をブロック。防いだ値を次の魔法ボーナスへ変換（最大${card.upgraded?45:30}）`;
             else if (card.extra === 'revenge_guard') main = `予告値＋失ったHP20%をブロック。防いだ値を${card.upgraded?'1.5倍で':''}反射`;
             else main = `ブロック${card.val}`;
@@ -1096,6 +1312,22 @@ const Game = {
                 maxhp_up:`初回のみ最大HP+${card.val}、最大HPの${pct(card.healRate)}%回復`,
                 next_draw:`次ターン${card.val}枚追加ドロー`,
                 mana_cycle:'魔道書を展開する',
+                mana_only:'一時魔力を凝縮する',
+                draw_flow:'追い風を受ける',
+                redraw_hand:'手札を総入れ替えする',
+                tiger_form:'毎ターンのコンボ開始値を1にする',
+                mana_forge:'一時魔力の獲得量をこの戦闘中+1',
+                second_heart:'ターン終了時、消費したHPの50%を回復',
+                breakthrough:'次に与えるダメージを1.5倍にする',
+                block_conversion:'全ブロックを消費し、5ごとに攻撃・魔力+1',
+                chain_art:'各ターン最初の物理攻撃を60%で追撃',
+                mana_reactor:'ターン開始時に一時魔力+1',
+                blood_pact:'HP消費によるブロック変換率を100%にする',
+                healing_strike:'回復カードの実回復量と同じダメージを与える',
+                limit_flow:'カード3枚ごとに行動権+1・1枚ドロー',
+                apex_str:'攻撃+5、コンボ開始値2、各ターン最初の物理攻撃を80%で追撃',
+                apex_int:'一時魔力獲得+2、ターン開始時一時魔力+2',
+                apex_hp:'最大HP30%回復、HP消費を125%ブロック化、消費HP75%をターン終了時に回復',
                 recycle:'捨て札を山札へ戻す',
                 berserk:`攻撃+${card.val}、失ったHP10ごとにさらに+1`,
                 echo:'次に与える魔法ダメージをもう一度与える',
@@ -1119,7 +1351,7 @@ const Game = {
         const changes = [];
         if (card.val) {
             let nextVal = parseFloat((card.val*1.5).toFixed(2));
-            if (['str_up','int_up','both_up','action_up','maxhp_up','next_draw','berserk','limit_break','world_tree'].includes(card.effect) || (card.type === 'def' && !['barrier','arcane_shield'].includes(card.id)) || card.type === 'heal') nextVal = Math.ceil(nextVal);
+            if (['str_up','int_up','both_up','action_up','maxhp_up','next_draw','berserk','limit_break','world_tree'].includes(card.effect) || (card.type === 'def' && !['barrier','arcane_shield','mana_ward','prism_guard'].includes(card.id)) || card.type === 'heal') nextVal = Math.ceil(nextVal);
             changes.push(`基礎値 ${card.val}→${nextVal}`);
         }
         if (card.draw) changes.push(`ドロー ${card.draw}→${card.draw+1}`);
@@ -1128,10 +1360,19 @@ const Game = {
         if (card.burn) changes.push(`炎上 ${card.burn}→${Math.ceil(card.burn*1.5)}`);
         if (card.thorns) changes.push(`反撃 ${card.thorns}→${Math.ceil(card.thorns*1.5)}`);
         if (card.extra === 'hp_sacrifice') changes.push('消費15%→12% / 威力2.6→3.4倍');
+        if (card.extra === 'hp_sacrifice_blast') changes.push('消費22%→18% / 威力3.4→4.2倍');
+        if (card.extra === 'hp_sacrifice_block') changes.push('消費12%→10% / ブロック2.5→3.2倍');
+        if (card.extra === 'missing_hp_damage') changes.push('失ったHP倍率 25%→35%');
+        if (card.id === 'fate_shuffle') changes.push(`追加ドロー ${card.redraw}→${card.redraw+1}`);
+        const engineUpgrade = { tiger_form:'コンボ開始 1→2', mana_forge:'追加魔力 +1→+2', second_heart:'HP還元 50%→75%', breakthrough:'次のダメージ 1.5→1.8倍', block_conversion:'変換効率 ブロック5→4ごと', chain_art:'追撃 60%→80%', mana_reactor:'毎ターン魔力 +1→+2', blood_pact:'装甲変換 100%→125%', healing_strike:'回復ダメージ 100%→150%', limit_flow:'発動間隔 3枚→2枚', apex_str:'攻撃+5→+7 / コンボ2→3 / 追撃80%→100%', apex_int:'魔力獲得・毎ターン +2→+3', apex_hp:'回復30%→45% / 装甲125%→150% / HP還元75%→100%' };
+        if (engineUpgrade[card.effect]) changes.push(engineUpgrade[card.effect]);
         if (card.extra === 'maxhp_scale') changes.push('最大HP倍率 30%→40% / 消費10%→8%');
         if (card.extra === 'block_dmg') changes.push('ブロック倍率 1.5→2倍');
         if (card.extra === 'hp_halve_press') changes.push('消費30%→25% / 威力2.75→3.5倍');
-        if (card.extra === 'maxhp_block') changes.push('50%/上限60→65%/上限75');
+        if (card.extra === 'maxhp_block') changes.push(card.id==='immortal_rampart'?'65%/上限75→80%/上限90':'50%/上限60→65%/上限75');
+        if (card.extra === 'combo_cashout') changes.push('コンボ倍率 35%→50%');
+        if (card.extra === 'mana_resonance') changes.push('魔力共鳴 65%→85%');
+        if (card.extra === 'vitality_wave') changes.push('最大HP22%→30% / 失ったHP25%→35%');
         if (card.extra === 'intent_block') changes.push('変換上限 30→45');
         if (card.extra === 'revenge_guard') changes.push('反射 1→1.5倍');
         if (['echo','immortal'].includes(card.effect) || ['causal_reverse','revenge_fortress'].includes(card.id)) changes.push('1枚引く');
@@ -1146,21 +1387,40 @@ const Game = {
         const e = State.battle.enemy;
         if (!e) return;
         const turn = State.battle.turnCount;
-        if (e.kind === 'trick' && turn % 3 === 1) { e.intent = 'drain'; e.intentValue = Math.max(1, Math.floor(e.baseAtk * .7)); }
+        e.intentHits = 1;
+        if (e.kind === 'swarm' && turn % 2 === 0) { e.intent = 'multi'; e.intentHits = 3; e.intentValue = Math.max(1,Math.floor((e.baseAtk+e.strength)*.46)); }
+        else if (e.kind === 'sprout' && turn % 3 === 1) { e.intent = 'heal'; e.intentValue = Math.max(5,Math.floor(e.maxHp*.1)); }
+        else if (e.kind === 'sprout' && turn % 3 === 2) { e.intent = 'drain'; e.intentValue = Math.max(1,Math.floor(e.baseAtk*.72)); }
+        else if (e.kind === 'assassin' && turn % 3 === 1) { e.intent = 'multi'; e.intentHits = 2; e.intentValue = Math.max(1,Math.floor((e.baseAtk+e.strength)*.7)); }
+        else if (e.kind === 'assassin' && turn % 3 === 2) { e.intent = 'heavy'; e.intentValue = Math.floor((e.baseAtk+e.strength)*1.55); }
+        else if (e.kind === 'trick' && turn % 3 === 1) { e.intent = 'drain'; e.intentValue = Math.max(1, Math.floor(e.baseAtk * .7)); }
         else if (e.kind === 'trick' && turn % 3 === 2) { e.intent = 'hex'; e.intentValue = 0; }
         else if (e.kind === 'brute' && turn % 3 === 2) { e.intent = 'heavy'; e.intentValue = Math.floor((e.baseAtk + e.strength) * 1.65); }
         else if (e.kind === 'guardian' && turn % 3 === 0) { e.intent = 'guard'; e.intentValue = Math.floor(e.maxHp * .16); }
         else if (e.kind === 'guardian' && turn % 3 === 2) { e.intent = 'heavy'; e.intentValue = Math.floor((e.baseAtk + e.strength) * 1.4); }
         else if (e.kind === 'normal' && turn > 0 && turn % 4 === 3) { e.intent = 'guard'; e.intentValue = Math.floor(e.maxHp * .12); }
-        else if (e.kind === 'boss' && turn % 4 === 1) { e.intent = 'buff'; e.intentValue = 2 + Math.floor(e.level / 10); }
-        else if (e.kind === 'boss' && turn % 4 === 2) { e.intent = 'guard'; e.intentValue = Math.floor(e.maxHp * .14); }
-        else if (e.kind === 'boss' && turn % 4 === 3) { e.intent = 'heavy'; e.intentValue = Math.floor((e.baseAtk + e.strength) * 1.8); }
+        else if (e.kind === 'dragon' && turn % 4 === 1) { e.intent = 'buff'; e.intentValue = 2 + Math.floor(e.level/12); }
+        else if (e.kind === 'dragon' && turn % 4 === 2) { e.intent = 'multi'; e.intentHits = 3; e.intentValue = Math.max(1,Math.floor((e.baseAtk+e.strength)*.55)); }
+        else if (e.kind === 'dragon' && turn % 4 === 3) { e.intent = 'heavy'; e.intentValue = Math.floor((e.baseAtk+e.strength)*1.7); }
+        else if (e.kind === 'phoenix' && turn % 4 === 1) { e.intent = 'heal'; e.intentValue = Math.max(8,Math.floor(e.maxHp*.09)); }
+        else if (e.kind === 'phoenix' && turn % 4 === 2) { e.intent = 'multi'; e.intentHits = 3; e.intentValue = Math.max(1,Math.floor((e.baseAtk+e.strength)*.5)); }
+        else if (e.kind === 'phoenix' && turn % 4 === 3) { e.intent = 'heavy'; e.intentValue = Math.floor((e.baseAtk+e.strength)*1.45); }
+        else if (e.kind === 'colossus' && turn % 4 === 1) { e.intent = 'guard'; e.intentValue = Math.floor(e.maxHp*.16); }
+        else if (e.kind === 'colossus' && turn % 4 === 2) { e.intent = 'buff'; e.intentValue = 2; }
+        else if (e.kind === 'colossus' && turn % 4 === 3) { e.intent = 'heavy'; e.intentValue = Math.floor((e.baseAtk+e.strength)*1.85); }
+        else if (e.kind === 'boss' && turn % 4 === 1) { e.intent = 'buff'; e.intentValue = 2; }
+        else if (e.kind === 'boss' && turn % 4 === 2) { e.intent = 'guard'; e.intentValue = Math.floor(e.maxHp*.14); }
+        else if (e.kind === 'boss' && turn % 4 === 3) { e.intent = 'heavy'; e.intentValue = Math.floor((e.baseAtk+e.strength)*1.7); }
         else { e.intent = 'atk'; e.intentValue = e.baseAtk + e.strength; }
     },
 
     advanceEnemyTurn: () => {
         State.battle.turnCount++;
-        if (State.battle.turnCount > 0 && State.battle.turnCount % 4 === 0) {
+        if (State.battle.enemy.affix?.id === 'frenzy' && State.battle.turnCount === 3) {
+            State.battle.enemy.strength += 2;
+            UI.toast('【変異：狂化】攻撃力+2！');
+        }
+        if (State.battle.turnCount > 0 && State.battle.turnCount % 5 === 0) {
             const rage = 1 + Math.floor(State.battle.enemy.level / 10);
             State.battle.enemy.strength += rage;
             UI.toast(`長期戦！ 敵の攻撃力+${rage}`);
@@ -1176,11 +1436,16 @@ const Game = {
 
         if (State.playerType === 'hp') {
             // 体力型: 安定した自然治癒。長期戦で強いが、完全な無限耐久にはしない。
-            let regen = Math.min(10, Math.max(4, Math.floor(State.maxHp * 0.06)));
+            let regen = Math.min(14, Math.max(5, Math.floor(State.maxHp * 0.08)));
             if(State.hp < State.maxHp) {
                 State.hp = Math.min(State.maxHp, State.hp + regen);
                 UI.toast(`【特性】自然治癒 +${regen}`);
                 UI.traitActivation('vitality','自然治癒',`HP +${regen}`);
+            }
+            if (State.battle.secondHeart && State.battle.hpSpentThisTurn > 0) {
+                const pulse = Math.min(State.maxHp-State.hp,Math.ceil(State.battle.hpSpentThisTurn*State.battle.secondHeart));
+                State.hp += pulse;
+                if (pulse > 0) { UI.combatNumber(pulse,'heal','player-battle-avatar'); UI.traitActivation('vitality','第二の心臓',`HP +${pulse}`); }
             }
         }
 
@@ -1201,6 +1466,12 @@ const Game = {
             Game.dealDamage(burnDamage, { kind:'mag', critical:false });
             UI.toast(`炎上 ${burnDamage}ダメージ！`);
             if (enemy.hp <= 0) { Game.winBattle(); return; }
+        }
+        if (enemy.affix?.id === 'regrowth' && enemy.hp < enemy.maxHp) {
+            const recovered = Math.min(enemy.maxHp-enemy.hp,Math.max(2,Math.floor(enemy.maxHp*.03)));
+            enemy.hp += recovered;
+            UI.combatNumber(recovered,'heal','enemy-sprite');
+            UI.toast(`【変異：再生】HPを${recovered}回復`);
         }
         if (State.battle.enemyFrozen) {
             State.battle.enemyFrozen = false;
@@ -1224,9 +1495,16 @@ const Game = {
             UI.burst('player-battle-avatar','#a855f7'); UI.toast('呪いでブロック獲得量が25%低下！');
             Game.advanceEnemyTurn(); return;
         }
-        let dmg = enemy.intentValue;
+        if (enemy.intent === 'heal') {
+            const recovered = Math.min(enemy.maxHp-enemy.hp,enemy.intentValue);
+            enemy.hp += recovered;
+            UI.combatNumber(recovered,'heal','enemy-sprite'); UI.burst('enemy-sprite','#4ade80');
+            UI.toast(`${enemy.name}はHPを${recovered}回復した！`);
+            Game.advanceEnemyTurn(); return;
+        }
+        let dmg = enemy.intent === 'multi' ? enemy.intentValue * (enemy.intentHits || 1) : enemy.intentValue;
         if (State.battle.enemyWeak) { dmg = Math.floor(dmg * .75); State.battle.enemyWeak = false; }
-        await UI.enemyAttack(enemy.intent === 'heavy');
+        await UI.enemyAttack(enemy.intent === 'heavy' || enemy.intent === 'multi');
         if (State.battle.manaAbsorb) {
             State.battle.manaAbsorb = false;
             const converted = Math.max(1, Math.min(8, Math.floor(dmg * .5)));
@@ -1260,7 +1538,7 @@ const Game = {
             State.hp -= actualDmg;
             State.runStats.damageTaken += actualDmg;
             UI.hitPlayer(actualDmg, enemy.intent === 'heavy');
-            UI.toast(`${actualDmg} のダメージを受けた！`);
+            UI.toast(enemy.intent === 'multi' ? `${enemy.intentHits}連撃！ 合計${actualDmg}ダメージ` : `${actualDmg} のダメージを受けた！`);
         } else {
             Sound.play('block'); UI.combatNumber(blocked, 'block', 'player-battle-avatar');
             UI.toast(`ガードした！ (残ブロック${State.battle.block})`);
@@ -1297,8 +1575,14 @@ const Game = {
         State.battle.enemiesDefeated++;
         const gainedBP = 12 + Math.min(18, State.battle.enemy.level * 2);
         State.bp += gainedBP;
+        let bossReward = '';
+        if (State.battle.enemy.boss) {
+            State.maxHp += 3; State.str += 1; State.int += 1; State.bp += 25;
+            const heal = Math.floor(State.maxHp*.5); State.hp = Math.min(State.maxHp,State.hp+heal);
+            bossReward = ' / 覚醒：最大HP+3・攻撃/魔力+1・BP+25・HP50%回復';
+        }
         const impactDelay = State.battle.pendingFx || 0;
-        setTimeout(() => { UI.victory(); UI.toast(`${State.battle.enemy.name} を倒した！ BP+${gainedBP}`); }, impactDelay + 60);
+        setTimeout(() => { UI.victory(); UI.toast(`${State.battle.enemy.name} を倒した！ BP+${gainedBP}${bossReward}`); }, impactDelay + 60);
         setTimeout(() => {
             UI.showDraft(State.playerType, 'battle_reward');
         }, impactDelay + (State.battle.enemy.boss ? 1150 : 760));
@@ -1309,10 +1593,10 @@ const Game = {
             Game.visitSecretMode();
         } else if (State.battle.enemiesDefeated > 0 && State.battle.enemiesDefeated % 5 === 0) {
             Game.visitShop();
-        } else if (State.battle.enemiesDefeated > 0 && State.battle.enemiesDefeated % 3 === 0) {
+        } else if (State.battle.enemiesDefeated > 0 && State.battle.enemiesDefeated % 2 === 0) {
             Game.showJourneyEvent();
         } else {
-            State.hp = Math.min(State.maxHp, State.hp + 5);
+            State.hp = Math.min(State.maxHp, State.hp + Math.max(5,Math.floor(State.maxHp*.1)));
             Game.spawnEnemy();
         }
     },
@@ -1330,6 +1614,7 @@ const Game = {
     },
     chooseJourneyEvent: (id) => {
         const event = JOURNEY_EVENTS.find(item => item.id === id); if (!event) return;
+        let detail = '';
         if (id === 'spring') State.hp = Math.min(State.maxHp,State.hp + Math.floor(State.maxHp*.4));
         if (id === 'forge') {
             const candidates = State.deck.filter(card => !card.upgraded);
@@ -1344,8 +1629,34 @@ const Game = {
             const index = State.deck.findIndex(card => ['punch','defend'].includes(card.id));
             if (index >= 0 && State.deck.length > 4) State.deck.splice(index,1); else State.bp += 15;
         }
-        State.hp = Math.min(State.maxHp,State.hp+5);
-        Sound.play('rare'); UI.toast(`${event.title}の効果を得た！`);
+        if (id === 'camp') {
+            State.hp = Math.min(State.maxHp,State.hp+Math.floor(State.maxHp*.25));
+            const candidates = State.deck.filter(card => !card.upgraded);
+            const card = candidates[Math.floor(Math.random()*candidates.length)];
+            if (card) { Game.upgradeCard(card.uid,true); detail = `${card.name}を強化`; } else State.bp += 20;
+        }
+        if (id === 'altar') {
+            const cost = Math.min(State.hp-1,Math.floor(State.hp*.2));
+            State.hp -= Math.max(0,cost); State.str += 2; State.int += 2; State.bp += 20;
+            detail = `HP-${cost} / 攻撃・魔力+2`;
+        }
+        if (id === 'feast') { State.maxHp += 4; State.hp = State.maxHp; detail = '全回復！'; }
+        if (id === 'mentor_path') {
+            const candidates = CARDS_DB.filter(card => Game.isCardUnlocked(card) && card.rarity !== 'rare' && card.attr === State.playerType && (!card.limit || Game.countCard(card.id)<card.limit));
+            const card = candidates[Math.floor(Math.random()*candidates.length)];
+            if (card) { Game.addCard(card.id); const gained = State.deck[State.deck.length-1]; Game.upgradeCard(gained.uid,true); detail = `${card.name}+を習得`; }
+            else { State.bp += 30; detail = '候補を極めていたためBP+30'; }
+        }
+        if (id === 'meteorite') {
+            if (Math.random()<.5) { State.str += 2; detail = '攻撃+2'; } else { State.int += 2; detail = '魔力+2'; }
+            State.bp += 15;
+        }
+        if (id === 'merchant') {
+            const index = State.deck.findIndex(card => ['punch','defend'].includes(card.id));
+            if (index >= 0 && State.deck.length > 4) { const [removed] = State.deck.splice(index,1); State.bp += 35; detail = `${removed.name}を交換・BP+35`; }
+            else { State.bp += 15; detail = '交換品なし・BP+15'; }
+        }
+        Sound.play('rare'); UI.toast(`${event.title}の効果を得た！${detail ? ` ${detail}` : ''}`);
         setTimeout(() => UI.changeScene('scene-battle',() => Game.spawnEnemy()),500);
     },
 
@@ -1356,6 +1667,8 @@ const Game = {
         if (State.tempMana > 0) UI.toast(`秘伝到達：一時魔力${State.tempMana}をリセット`);
         State.tempMana = 0;
         State.battle.pendingManaRefund = 0;
+        if (State.playerType === 'hp' && State.battle.block > 0) UI.toast(`5戦チェックポイント：持越しブロック${State.battle.block}をリセット`);
+        if (State.playerType === 'hp') State.battle.block = 0;
         State.hp = Math.min(State.maxHp, State.hp + 12);
         UI.changeScene('scene-secret', () => UI.renderSecretMode());
         Sound.play('rare');
@@ -1380,8 +1693,10 @@ const Game = {
         if (State.tempMana > 0) UI.toast(`ショップ到達：一時魔力${State.tempMana}をリセット`);
         State.tempMana = 0;
         State.battle.pendingManaRefund = 0;
+        if (State.playerType === 'hp' && State.battle.block > 0) UI.toast(`ショップ到達：持越しブロック${State.battle.block}をリセット`);
+        if (State.playerType === 'hp') State.battle.block = 0;
         State.shopTab = 'upgrade';
-        const available = CARDS_DB.filter(c => c.rarity !== 'rare' && (!c.limit || Game.countCard(c.id) < c.limit));
+        const available = CARDS_DB.filter(c => Game.isCardUnlocked(c) && c.rarity !== 'rare' && (!c.limit || Game.countCard(c.id) < c.limit));
         const typed = Game.shuffle(available.filter(c => c.attr === State.playerType)).slice(0, 3);
         const common = Game.shuffle(available.filter(c => c.attr === 'common' && !typed.includes(c))).slice(0, 1);
         State.shopCards = [...typed, ...common].map(c => c.id);
@@ -1445,6 +1760,11 @@ const Game = {
         State.battle.processing = true;
         const defeated = State.battle.enemiesDefeated;
         State.runShardsEarned = 3 + Math.floor(defeated * .7) + Math.floor(defeated / 5) * 3;
+        State.runLevelBefore = State.meta.playerLevel;
+        State.runXpEarned = 20 + defeated * 10 + Math.min(80,Math.floor(State.runStats.damageDealt / 120));
+        State.meta.playerXp += State.runXpEarned;
+        State.meta.playerLevel = Meta.levelFromXp(State.meta.playerXp);
+        State.runNewUnlocks = CARDS_DB.filter(card => card.unlockLevel > State.runLevelBefore && card.unlockLevel <= State.meta.playerLevel);
         State.meta.shards += State.runShardsEarned; Meta.save(State.meta);
         RunStorage.clear();
         document.getElementById('result-score').innerText = State.battle.enemiesDefeated;
@@ -1484,7 +1804,57 @@ const UI = {
     },
     updateStartMeta: () => {
         const levels = Object.values(State.meta.upgrades).reduce((sum,level)=>sum+level,0);
-        document.getElementById('meta-start-summary').innerHTML = levels > 0 ? `<i class="fas fa-star text-yellow-300"></i> 継承LV ${levels} ・ ${State.meta.shards} ✦` : `<i class="fas fa-seedling text-green-200"></i> 継承強化なし ・ ${State.meta.shards} ✦`;
+        document.getElementById('meta-start-summary').innerHTML = `<i class="fas fa-star text-yellow-300"></i> PLAYER Lv.${State.meta.playerLevel} ・ 継承LV ${levels} ・ ${State.meta.shards} ✦`;
+        const unlocked = CARDS_DB.filter(card => Game.isCardUnlocked(card)).length;
+        const progress = document.getElementById('library-progress');
+        if (progress) progress.innerText = `${unlocked}/${CARDS_DB.length}`;
+        const startScene = document.getElementById('scene-start');
+        if (startScene && !startScene.classList.contains('hidden')) UI.updateTitleHeader();
+    },
+    renderDeckViewer: () => {
+        const sources = {
+            deck: { title:'現在の全デッキ', cards:State.deck || [], note:'所持しているカード。戦闘中の各置き場とは別に全構成を表示します。' },
+            draw: { title:'山札', cards:State.battle.drawPile || [], note:'これから引けるカードの内容。ドロー順は伏せて名前順に表示します。' },
+            discard: { title:'捨て札', cards:State.battle.discardPile || [], note:'山札が尽きると再び山札へ戻るカードです。' },
+            exhaust: { title:'除外札', cards:State.battle.exhaustPile || [], note:'この戦闘ではもう使用できないカードです。' }
+        };
+        const current = sources[State.deckViewerTab] || sources.deck;
+        const cards = [...current.cards].sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+        document.querySelectorAll('.deck-view-tab').forEach(button => {
+            const active = button.dataset.deckTab === State.deckViewerTab;
+            button.className = `deck-view-tab rounded-lg py-2 text-xs font-black transition ${active?'bg-yellow-300 text-slate-900':'bg-white/5 text-slate-300 hover:bg-white/10'}`;
+        });
+        document.getElementById('deck-viewer-caption').innerText = `${current.title}：${current.note}`;
+        document.getElementById('deck-viewer-count').innerText = `${cards.length}枚`;
+        const grid = document.getElementById('deck-viewer-grid'); grid.innerHTML = '';
+        if (!cards.length) { grid.innerHTML = '<div class="col-span-full py-12 text-center text-slate-400"><i class="fas fa-box-open text-3xl mb-2"></i><div class="font-bold">カードはありません</div></div>'; return; }
+        cards.forEach(card => {
+            const el = document.createElement('div');
+            const tone = card.attr==='str'?'border-red-400/35 bg-red-500/10':card.attr==='int'?'border-blue-400/35 bg-blue-500/10':card.attr==='hp'?'border-green-400/35 bg-green-500/10':'border-slate-400/35 bg-white/5';
+            el.className = `collection-card rounded-2xl border ${tone} p-3 text-left overflow-hidden`;
+            el.innerHTML = `<div class="flex items-start justify-between gap-2"><i class="fas ${card.icon} text-xl ${card.rarity==='rare'?'text-yellow-300':'text-white'}"></i><div class="flex gap-1">${card.upgraded?'<span class="text-[8px] font-black bg-green-400 text-green-950 rounded px-1.5 py-.5">UP</span>':''}${card.secretMod?'<span class="text-[8px] font-black bg-fuchsia-500 rounded px-1.5 py-.5">秘伝</span>':''}</div></div><div class="font-black text-sm mt-2">${card.name}</div><div class="text-[10px] leading-relaxed text-slate-300 mt-1">${card.desc}</div>`;
+            grid.appendChild(el);
+        });
+    },
+    renderCardLibrary: () => {
+        const tab = ['common','hp','str','int'].includes(State.libraryTab) ? State.libraryTab : 'common';
+        const cards = CARDS_DB.filter(card => card.attr===tab).sort((a,b)=>(a.unlockLevel||0)-(b.unlockLevel||0)||a.name.localeCompare(b.name,'ja'));
+        const totalUnlocked = CARDS_DB.filter(card => Game.isCardUnlocked(card)).length;
+        const tabUnlocked = cards.filter(card => Game.isCardUnlocked(card)).length;
+        document.getElementById('library-caption').innerText = `PLAYER Lv.${State.meta.playerLevel} ・ 全体 ${totalUnlocked}/${CARDS_DB.length} ・ このプラン ${tabUnlocked}/${cards.length}`;
+        document.querySelectorAll('.library-tab').forEach(button => {
+            const active = button.dataset.libraryTab === tab;
+            button.className = `library-tab rounded-lg py-2 text-xs font-black transition ${active?'bg-yellow-300 text-slate-900':'bg-white/5 text-indigo-100 hover:bg-white/10'}`;
+        });
+        const grid = document.getElementById('card-library-grid'); grid.innerHTML = '';
+        cards.forEach(card => {
+            const unlocked = Game.isCardUnlocked(card);
+            const el = document.createElement('div');
+            const tone = tab==='str'?'border-red-400/35 bg-red-500/10':tab==='int'?'border-blue-400/35 bg-blue-500/10':tab==='hp'?'border-green-400/35 bg-green-500/10':'border-slate-400/35 bg-white/5';
+            el.className = `collection-card rounded-2xl border ${tone} p-3 ${unlocked?'':'locked'}`;
+            el.innerHTML = `<div class="flex items-start justify-between gap-2"><i class="fas ${unlocked?card.icon:'fa-question'} text-xl ${unlocked&&card.rarity==='rare'?'text-yellow-300':'text-white'}"></i>${card.rarity==='rare'?'<span class="text-[8px] font-black bg-yellow-300 text-amber-950 rounded-full px-2 py-1">RARE</span>':''}</div><div class="font-black text-sm mt-2">${unlocked?card.name:'未解放カード'}</div><div class="text-[10px] font-bold mt-1 ${unlocked?'text-indigo-200':'text-yellow-200'}">${card.unlockLevel?`PLAYER Lv.${card.unlockLevel}`:'基本カード'}</div><div class="collection-card-description text-[10px] md:text-xs leading-relaxed mt-1 ${unlocked?'text-slate-300':'text-slate-400'}">${unlocked?card.desc:`Lv.${card.unlockLevel}で正体と効果が解放されます。`}</div>`;
+            grid.appendChild(el);
+        });
     },
     getGrowthRank: () => {
         const score = State.maxHp / 7 + State.str * 1.7 + State.int * 1.7;
@@ -1576,18 +1946,19 @@ const UI = {
     },
     setArena: (kind) => {
         const scene = document.getElementById('scene-battle');
-        const colors = { normal:'#8b5cf6', brute:'#ef4444', trick:'#6366f1', guardian:'#0ea5e9', boss:'#f59e0b' };
+        const colors = { normal:'#8b5cf6', brute:'#ef4444', trick:'#6366f1', sprout:'#22c55e', swarm:'#eab308', guardian:'#0ea5e9', assassin:'#dc2626', dragon:'#f97316', phoenix:'#f43f5e', colossus:'#64748b', boss:'#f59e0b' };
         scene.style.setProperty('--arena-accent', colors[kind] || colors.normal);
         const sprite = document.getElementById('enemy-sprite');
+        const bossKind = kind === 'boss' || ['dragon','phoenix','colossus'].includes(kind);
         sprite.getAnimations().forEach(animation => animation.cancel());
         sprite.classList.remove('victory-burst','enemy-hit','enemy-hit-heavy','player-hurt');
         sprite.style.opacity = '1'; sprite.style.transform = 'none'; sprite.style.visibility = 'visible';
-        sprite.classList.toggle('boss-sprite', kind === 'boss');
+        sprite.classList.toggle('boss-sprite', bossKind);
         requestAnimationFrame(() => sprite.animate([
             { opacity:0, transform:'translateY(-35px) scale(.35)' },
             { opacity:1, transform:'translateY(5px) scale(1.15)', offset:.72 },
             { opacity:1, transform:'translateY(0) scale(1)' }
-        ], { duration:kind === 'boss' ? 680 : 420, easing:'cubic-bezier(.16,1,.3,1)' }));
+        ], { duration:bossKind ? 680 : 420, easing:'cubic-bezier(.16,1,.3,1)' }));
     },
     flash: (kind = 'phys') => {
         const el = document.getElementById('battle-flash'); if (!el) return;
@@ -1712,6 +2083,27 @@ const UI = {
     updateMetaResult: () => {
         document.getElementById('result-shards-earned').innerText = `+${State.runShardsEarned || 0} ✦`;
         document.getElementById('result-shards-total').innerText = State.meta.shards;
+        const level = State.meta.playerLevel;
+        const floorXp = Meta.xpForLevel(level);
+        const nextXp = Meta.xpForLevel(Math.min(MAX_PLAYER_LEVEL,level + 1));
+        const needed = Math.max(1,nextXp - floorXp);
+        const progress = level >= MAX_PLAYER_LEVEL ? 100 : Math.min(100,Math.max(0,(State.meta.playerXp-floorXp)/needed*100));
+        document.getElementById('result-player-level').innerText = level;
+        document.getElementById('result-xp-earned').innerText = `+${State.runXpEarned || 0} EXP`;
+        document.getElementById('result-xp-progress').innerText = `${State.meta.playerXp-floorXp} / ${level>=MAX_PLAYER_LEVEL?'MAX':needed} EXP`;
+        document.getElementById('result-xp-next').innerText = level >= MAX_PLAYER_LEVEL ? 'MAX LEVEL' : `NEXT Lv.${level+1}`;
+        requestAnimationFrame(() => { document.getElementById('result-xp-bar').style.width = `${progress}%`; });
+        document.getElementById('result-level-up').classList.toggle('hidden', level <= State.runLevelBefore);
+        const unlockPanel = document.getElementById('result-unlocks');
+        const unlockList = document.getElementById('result-unlock-list');
+        unlockList.innerHTML = '';
+        State.runNewUnlocks.forEach(card => {
+            const badge = document.createElement('div');
+            badge.className = `rounded-full px-3 py-1.5 text-xs font-black border ${card.rarity==='rare'?'bg-yellow-400/20 border-yellow-300/50 text-yellow-200':'bg-white/10 border-white/20 text-white'}`;
+            badge.innerHTML = `<i class="fas ${card.icon} mr-1"></i>${card.name}${card.rarity==='rare'?' ★':''}`;
+            unlockList.appendChild(badge);
+        });
+        unlockPanel.classList.toggle('hidden', State.runNewUnlocks.length === 0);
         document.getElementById('meta-shards-display').innerText = State.meta.shards;
         const grid = document.getElementById('meta-upgrade-grid'); grid.innerHTML = '';
         Object.entries(META_UPGRADES).forEach(([key,definition]) => {
@@ -1730,14 +2122,30 @@ const UI = {
             document.querySelectorAll('[id^="scene-"]').forEach(el => el.classList.add('hidden'));
             const el = document.getElementById(id);
             el.classList.remove('hidden');
-            if(id === 'scene-start') el.classList.add('slide-in');
+            if(id === 'scene-start') {
+                el.classList.add('slide-in');
+                UI.updateTitleHeader();
+            }
             setTimeout(() => {
                 overlay.style.opacity = '0';
                 if (onShown) setTimeout(onShown, 120);
             }, 50);
         }, 500);
     },
+    updateTitleHeader: () => {
+        const level = State.meta.playerLevel;
+        const atMax = level >= MAX_PLAYER_LEVEL;
+        const nextLevelXp = Meta.xpForLevel(Math.min(MAX_PLAYER_LEVEL, level + 1));
+        document.getElementById('header-icon').innerHTML = '<i class="fas fa-star"></i>';
+        document.getElementById('player-name-display').innerText = 'たまごち！';
+        document.getElementById('phase-display').innerText = 'PLAYER LEVEL';
+        document.getElementById('turn-display').innerText = `Lv.${level}`;
+        document.getElementById('turn-sub').innerText = atMax ? 'MAX LEVEL' : `次まで ${Math.max(0, nextLevelXp - State.meta.playerXp)} XP`;
+        document.getElementById('trait-display').classList.add('hidden');
+        document.getElementById('bp-display').classList.add('hidden');
+    },
     updateHeader: () => {
+        document.getElementById('header-icon').innerHTML = '<i class="fas fa-egg"></i>';
         document.getElementById('player-name-display').innerText = State.name;
         const ph = State.phase === 'training' ? '育成中' : (State.phase === 'battle' ? `戦闘中 (${State.battle.enemiesDefeated}体目)` : '準備');
         document.getElementById('phase-display').innerText = ph;
@@ -1849,11 +2257,11 @@ const UI = {
         container.innerHTML = '';
         container.className = 'w-full max-w-6xl grid grid-cols-3 gap-2 md:gap-6 overflow-y-auto pb-4 px-2 md:px-4';
         const isUnderLimit = (c) => { const limit = c.limit || (c.rarity === 'rare' ? 1 : null); return !limit || Game.countCard(c.id) < limit; };
-        const getCommons = () => CARDS_DB.filter(c => { if (c.rarity === 'rare') return false; if (!isUnderLimit(c)) return false; return c.attr === 'common' || c.attr === type; });
+        const getCommons = () => CARDS_DB.filter(c => { if (!Game.isCardUnlocked(c)) return false; if (c.rarity === 'rare') return false; if (!isUnderLimit(c)) return false; return c.attr === 'common' || c.attr === type; });
         if (mode === 'battle_reward') {
             skipBtn.classList.remove('hidden'); title.innerText = State.battle.enemy.boss ? "ボス撃破報酬！" : State.battle.enemy.elite ? "エリート報酬！" : "バトル報酬！";
             let commons = getCommons();
-            let rares = CARDS_DB.filter(c => c.rarity === 'rare' && c.pool === type && isUnderLimit(c));
+            let rares = CARDS_DB.filter(c => Game.isCardUnlocked(c) && c.rarity === 'rare' && c.pool === type && isUnderLimit(c));
             let choices = [];
             const guaranteedRare = rares.length > 0 && (State.battle.enemy.boss || State.rarePity >= 4);
             const rareChance = State.battle.enemy.elite ? .08 : .03;
@@ -1900,7 +2308,7 @@ const UI = {
             const button = document.createElement('button');
             button.className = `event-choice draft-reveal text-left rounded-2xl border border-white/20 bg-gradient-to-br ${event.color} p-4 md:p-6 shadow-2xl transition hover:scale-[1.03] active:scale-95`;
             button.style.setProperty('--delay',`${index*90}ms`);
-            button.innerHTML = `<div class="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-white/20 flex items-center justify-center text-2xl md:text-3xl mb-3 border border-white/30"><i class="fas ${event.icon}"></i></div><div class="font-black text-lg md:text-2xl mb-1">${event.title}</div><div class="text-xs md:text-sm text-white/80 leading-relaxed">${event.desc}</div><div class="mt-4 text-xs font-black bg-black/20 inline-flex px-3 py-1 rounded-full">これを選ぶ <i class="fas fa-chevron-right ml-2 mt-0.5"></i></div>`;
+            button.innerHTML = `<div class="flex items-start justify-between gap-2"><div class="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-white/20 flex items-center justify-center text-2xl md:text-3xl mb-3 border border-white/30"><i class="fas ${event.icon}"></i></div>${event.risk?'<span class="text-[10px] font-black bg-red-950/50 border border-red-200/40 rounded-full px-2 py-1">HIGH RISK</span>':''}</div><div class="font-black text-lg md:text-2xl mb-1">${event.title}</div><div class="text-xs md:text-sm text-white/80 leading-relaxed">${event.desc}</div><div class="mt-4 text-xs font-black bg-black/20 inline-flex px-3 py-1 rounded-full">これを選ぶ <i class="fas fa-chevron-right ml-2 mt-0.5"></i></div>`;
             button.onclick = () => { button.disabled = true; Game.chooseJourneyEvent(event.id); };
             container.appendChild(button);
         });
@@ -1950,27 +2358,32 @@ const UI = {
             const e = State.battle.enemy;
             document.getElementById('enemy-name').innerText = e.name;
             document.getElementById('enemy-sprite').innerText = e.sprite || '👿';
-            document.getElementById('enemy-level').innerText = `LV.${e.level}${e.boss ? ' BOSS' : e.elite ? ' ELITE' : ''}`;
+            document.getElementById('enemy-level').innerText = `LV.${e.level} ${e.archetypeLabel || ''}${e.boss ? '・BOSS' : e.elite ? '・ELITE' : ''}`;
             const hpPct = Math.max(0, (e.hp / e.maxHp) * 100);
             document.getElementById('enemy-hp-bar').style.width = `${hpPct}%`;
             document.getElementById('enemy-hp-text').innerText = `${e.hp}/${e.maxHp}`;
             const intents = {
                 atk: ['fa-sword', 'text-red-600 bg-red-100', `攻撃 ${e.intentValue}`],
                 heavy: ['fa-skull-crossbones', 'text-red-700 bg-orange-100', `強攻撃 ${e.intentValue}`],
+                multi: ['fa-bolt', 'text-amber-700 bg-amber-100', `連撃 ${e.intentValue}×${e.intentHits||1}`],
                 drain: ['fa-tint', 'text-purple-700 bg-purple-100', `吸収 ${e.intentValue}`],
                 buff: ['fa-arrow-up', 'text-yellow-700 bg-yellow-100', `攻撃強化 +${e.intentValue}`],
                 guard: ['fa-shield-alt', 'text-blue-700 bg-blue-100', `防御 +${e.intentValue}`],
-                hex: ['fa-skull', 'text-purple-700 bg-purple-100', '呪い：防御弱化']
+                hex: ['fa-skull', 'text-purple-700 bg-purple-100', '呪い：防御弱化'],
+                heal: ['fa-heart', 'text-green-700 bg-green-100', `回復 +${e.intentValue}`]
             };
             const info = intents[e.intent] || intents.atk;
             document.getElementById('enemy-intent').className = `flex items-center justify-center gap-1 md:gap-2 text-xs md:text-base font-bold ${info[1]} py-0.5 px-3 md:py-1 md:px-4 rounded-full inline-block shadow-sm whitespace-nowrap`;
             document.getElementById('enemy-intent').innerHTML = `<i class="fas ${info[0]}"></i> <span>${info[2]}</span>`;
             const enemyStatuses = [];
+            if (e.trait) enemyStatuses.push(`<span class="status-chip bg-slate-700 text-white" title="${e.trait}"><i class="fas fa-circle-info"></i>${e.archetypeLabel}</span>`);
             if (e.block > 0) enemyStatuses.push(`<span class="status-chip bg-blue-500 text-white"><i class="fas fa-shield-alt"></i>${e.block}</span>`);
             if (State.battle.enemyVulnerable > 0) enemyStatuses.push(`<span class="status-chip bg-orange-500 text-white"><i class="fas fa-crosshairs"></i>脆弱 ${State.battle.enemyVulnerable}</span>`);
             if (State.battle.enemyBurn > 0) enemyStatuses.push(`<span class="status-chip bg-red-500 text-white"><i class="fas fa-fire"></i>炎上 ${State.battle.enemyBurn}</span>`);
             if (State.battle.enemyWeak) enemyStatuses.push(`<span class="status-chip bg-slate-500 text-white"><i class="fas fa-arrow-down"></i>弱体</span>`);
             if (State.battle.enemyFrozen) enemyStatuses.push(`<span class="status-chip bg-cyan-500 text-white"><i class="fas fa-snowflake"></i>凍結</span>`);
+            if (e.affix) enemyStatuses.push(`<span class="status-chip bg-fuchsia-600 text-white" title="${e.affix.desc}"><i class="fas fa-dna"></i>${e.affix.name}</span>`);
+            if (e.phaseTriggered) enemyStatuses.push('<span class="status-chip bg-orange-600 text-white"><i class="fas fa-fire"></i>本気</span>');
             document.getElementById('enemy-statuses').innerHTML = enemyStatuses.join('');
         }
         document.getElementById('battle-player-hp').innerText = State.hp;
@@ -1982,6 +2395,7 @@ const UI = {
         const blkEl = document.getElementById('battle-block');
         if(State.battle.block > 0) { blkEl.classList.remove('hidden'); document.getElementById('battle-block-val').innerText = State.battle.block; } else { blkEl.classList.add('hidden'); }
         const playerStatuses = [];
+        if (State.playerType === 'hp') playerStatuses.push(`<span class="status-chip bg-blue-600 text-white" title="5戦チェックポイントまでブロックを持ち越す"><i class="fas fa-shield-heart"></i>区間防壁</span>`);
         if (State.battle.playerTempStr > 0) playerStatuses.push(`<span class="status-chip bg-red-500 text-white">攻+${State.battle.playerTempStr}</span>`);
         if (State.battle.playerTempInt > 0) playerStatuses.push(`<span class="status-chip bg-indigo-500 text-white">魔+${State.battle.playerTempInt}</span>`);
         if (State.battle.thorns > 0) playerStatuses.push(`<span class="status-chip bg-orange-500 text-white">反撃${State.battle.thorns}</span>`);
