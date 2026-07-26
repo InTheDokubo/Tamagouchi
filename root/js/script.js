@@ -89,7 +89,7 @@ const SECRET_MODS = {
     rebirth: { name:'輪廻刻印', icon:'fa-arrows-rotate', desc:'「1回のみ」を失い、使用後は捨て札へ戻る。' },
     rupture: { name:'破砕の型', icon:'fa-burst', desc:'使用するたび、敵へ脆弱を1付与する。' },
     overflow: { name:'生命変換', icon:'fa-heart-circle-plus', desc:'最大HPを超えた回復量をブロックへ変換する。' },
-    anchor: { name:'不動結界', icon:'fa-anchor', desc:'このカードで得たブロックを次ターンへ持ち越す。' },
+    anchor: { name:'重装化', icon:'fa-shield-halved', desc:'このカードで得るブロックが50%増加する。' },
     insight: { name:'先読み術式', icon:'fa-eye', desc:'使用時、さらにカードを1枚引く。' },
     tempo: { name:'無拍子', icon:'fa-forward-fast', desc:'使用時、行動権を1回復する。' },
     serenity: { name:'静心の守り', icon:'fa-spa', desc:'使用時、ブロック6を得る。' },
@@ -944,8 +944,8 @@ const Game = {
             if (card.extra === 'intent_block') blk = Game.incomingDamage();
             if (card.extra === 'revenge_guard') blk = Game.incomingDamage() + Math.floor((State.maxHp - State.hp) * .2);
             if (State.battle.playerFrail) blk = Math.max(1, Math.floor(blk * .75));
+            if (card.secretMod === 'anchor') blk = Math.ceil(blk * 1.5);
             State.battle.block += blk;
-            if (card.secretMod === 'anchor') State.battle.retainBlock = true;
             if (card.extra === 'intent_block') State.battle.counterMagic = card.upgraded ? 45 : 30;
             if (card.extra === 'revenge_guard') State.battle.reflectNext = card.upgraded ? 1.5 : 1;
             UI.combatNumber(blk, 'block', 'player-battle-avatar'); Sound.play('block'); UI.burst('player-battle-avatar','#60a5fa');
@@ -1129,9 +1129,10 @@ const Game = {
         State.battle.pendingFx = Math.max(State.battle.pendingFx || 0, meta.delay || 0);
         let finalAmount = Math.max(0, Math.floor(amount));
         if (State.battle.breakthrough) {
-            finalAmount = Math.floor(finalAmount * State.battle.breakthrough);
+            const breakthroughMultiplier = State.battle.breakthrough;
+            finalAmount = Math.floor(finalAmount * breakthroughMultiplier);
             State.battle.breakthrough = false;
-            UI.toast(`【突破口】ダメージ${State.battle.breakthrough}倍！`);
+            UI.toast(`【突破口】ダメージ${breakthroughMultiplier}倍！`);
         }
         const vulnerableStacks = State.battle.enemyVulnerable;
         if (vulnerableStacks > 0) {
@@ -1212,10 +1213,15 @@ const Game = {
             const hits = card.hits || 1;
             let enemyBlock = State.battle.enemy.block || 0;
             let vulnerableStacks = State.battle.enemyVulnerable;
+            let breakthroughMultiplier = State.battle.breakthrough || 1;
             const hitAmounts = [];
             let total = 0;
             for (let k=0;k<hits;k++) {
                 let hit = Math.floor(amount * (1 + Math.min(5,State.battle.combo + k) * .1));
+                if (breakthroughMultiplier > 1) {
+                    hit = Math.floor(hit * breakthroughMultiplier);
+                    breakthroughMultiplier = 1;
+                }
                 if (vulnerableStacks > 0) {
                     hit = Math.floor(hit * (1 + vulnerableStacks * .5));
                     vulnerableStacks = 0;
@@ -1232,11 +1238,14 @@ const Game = {
             if (card.extra === 'temp_mana_burst') amount += previewManaSpent * 4;
             if (card.extra === 'mana_scale_burst') amount += Math.floor(int*(card.manaScale||.8)*previewManaSpent);
             if (card.extra === 'mana_resonance') amount += Math.floor(int*(card.manaScale||.65)*State.tempMana);
-            const firstHit = State.battle.enemyVulnerable > 0 ? Math.floor(amount * 1.5) : amount;
+            const echoAmount = amount;
+            if (State.battle.breakthrough) amount = Math.floor(amount * State.battle.breakthrough);
+            const vulnerableMultiplier = 1 + State.battle.enemyVulnerable * .5;
+            const firstHit = Math.floor(amount * vulnerableMultiplier);
             const enemyBlock = State.battle.enemy.block || 0;
             const firstTotal = Math.max(0, firstHit - enemyBlock);
             const remainingBlock = Math.max(0, enemyBlock - firstHit);
-            let total = firstTotal + (State.battle.echo ? Math.max(0, amount - remainingBlock) : 0);
+            let total = firstTotal + (State.battle.echo ? Math.max(0, echoAmount - remainingBlock) : 0);
             return `${card.manaCost ? `一時魔力-${previewManaSpent} / ` : ''}予測 ${total} DMG${State.battle.echo?'（残響）':''}`;
         }
         if (card.type === 'def') {
@@ -1251,6 +1260,7 @@ const Game = {
             if (card.extra === 'intent_block') block = Game.incomingDamage();
             if (card.extra === 'revenge_guard') block = Game.incomingDamage() + Math.floor((State.maxHp-State.hp)*.2);
             if (State.battle.playerFrail) block = Math.max(1,Math.floor(block*.75));
+            if (card.secretMod === 'anchor') block = Math.ceil(block * 1.5);
             return `ブロック +${block}${hpCost ? ` / HP-${hpCost}` : ''}`;
         }
         if (card.type === 'heal') { const baseHeal = Game.getCardHeal(card); const heal = card.extra==='low_hp_double' && State.hp<=State.maxHp/2 ? baseHeal*2 : baseHeal; return `HP +${Math.min(State.maxHp-State.hp, heal)}（最大HPの${Math.round(card.healRate*100)}%${card.extra==='low_hp_double'&&State.hp<=State.maxHp/2?'×2':''}）`; }

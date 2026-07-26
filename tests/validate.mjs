@@ -121,6 +121,8 @@ if ((script.match(/Game\.isCardUnlocked\(c\)/g) || []).length < 3) fail('Locked 
 if (!script.includes('playerXp') || !script.includes('levelFromXp') || !script.includes('State.runXpEarned = 20 + defeated * 10')) fail('Persistent player experience and level calculation are missing');
 if (!script.includes("UI.toast('【特性】連撃の呼吸！ 行動権+1・1枚ドロー')") || !script.includes('State.battle.combo >= 3')) fail('Attack archetype must trigger its once-per-turn combo flow at three hits');
 if (!script.includes('1 + vulnerableStacks * .5') || !script.includes('State.battle.enemyVulnerable = 0')) fail('Vulnerability must stack without a cap and be consumed all at once by the next attack');
+if (!script.includes("anchor: { name:'重装化'") || !script.includes("card.secretMod === 'anchor') blk = Math.ceil(blk * 1.5)") || readme.includes('不動結界')) fail('Obsolete block retention secret must be replaced by the 50% Heavy Armor bonus');
+if (!script.includes('let breakthroughMultiplier = State.battle.breakthrough || 1') || !script.includes('if (State.battle.breakthrough) amount = Math.floor(amount * State.battle.breakthrough)')) fail('Physical and magical damage previews must include Breakthrough');
 if (!readme.includes('攻撃型の設計') || !readme.includes('1ターンに1回だけ発動')) fail('Attack archetype design and trait limit must be documented');
 if (!script.includes("State.playerType === 'str' && Math.random() < 0.1") || !script.includes('Math.floor(dmg * 1.5)') || !script.includes("UI.traitActivation('attack','クロスカウンター'")) fail('Attack archetype must dodge and counter at 1.5x power with a dedicated cut-in');
 if (!readme.includes('クロスカウンター') || !readme.includes('10%の確率で完全回避')) fail('Cross Counter must be documented');
