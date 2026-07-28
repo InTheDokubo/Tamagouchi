@@ -6,6 +6,7 @@
   "description": "育成とデッキ構築を組み合わせたローグライトカードバトル",
   "scripts": {
     "start": "node server.js",
+    "debug": "node server.js --debug-all-cards",
     "check": "node --check server.js && node --input-type=module --check < root/js/data.js && node --input-type=module --check < root/js/script.js && node tests/validate.mjs"
   }
 }

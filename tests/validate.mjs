@@ -5,6 +5,9 @@ const fail = message => { throw new Error(message); };
 const ids = CARDS_DB.map(card => card.id);
 const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
 if (duplicateIds.length) fail(`Duplicate card ids: ${duplicateIds.join(', ')}`);
+const icons = CARDS_DB.map(card => card.icon);
+const duplicateIcons = icons.filter((icon,index) => icon && icons.indexOf(icon) !== index);
+if (duplicateIcons.length) fail(`Duplicate card icons: ${[...new Set(duplicateIcons)].join(', ')}`);
 
 const validTypes = new Set(['phys', 'mag', 'def', 'skill', 'buff', 'heal']);
 const validAttrs = new Set(['str', 'int', 'hp', 'common']);
@@ -55,6 +58,12 @@ for (const effect of ['tiger_form','mana_forge','second_heart','chain_art','mana
 }
 const vitalityUnlocks = Object.fromEntries(unlockCards.filter(card => card.attr === 'hp').map(card => [card.unlockLevel,card]));
 if (vitalityUnlocks[2]?.effect !== 'second_heart' || vitalityUnlocks[4]?.effect !== 'blood_pact' || vitalityUnlocks[5]?.effect !== 'healing_strike') fail('Vitality level rewards must unlock its HP-spend and healing engines in three stages');
+const astralCollapse = CARDS_DB.find(card => card.id === 'astral_collapse');
+if (astralCollapse.extra !== 'temp_mana_flat_burst' || astralCollapse.manaFlat !== 8 || astralCollapse.manaScale) fail('Star Devourer must add a flat 8 damage per temporary mana spent');
+const leyResonance = CARDS_DB.find(card => card.id === 'ley_resonance');
+if (leyResonance.type !== 'skill' || leyResonance.effect !== 'mana_echo' || !leyResonance.add_action || !leyResonance.exhaust) fail('Dragon Vein Resonance must be a one-use temporary-mana echo skill');
+const fireball = CARDS_DB.find(card => card.id === 'fireball');
+if (fireball.burn !== 6 || !fireball.desc.includes('炎上6')) fail('Fire Magic must apply 6 burn for ignition combos');
 for (const type of validPools) {
     const rares = CARDS_DB.filter(card => card.rarity === 'rare' && card.pool === type);
     if (rares.length < 5) fail(`Not enough rare cards for ${type}: ${rares.length}`);
@@ -63,19 +72,23 @@ if (CONSTANTS.COST_REMOVE >= CONSTANTS.COST_BUY) fail('Deck removal should remai
 
 const html = fs.readFileSync(new URL('../root/index.html', import.meta.url), 'utf8');
 const script = fs.readFileSync(new URL('../root/js/script.js', import.meta.url), 'utf8');
+const server = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 if (!script.includes('const MULTI_HIT_INTERVAL = 145') || !script.includes('multiHit:true')) fail('Multi-hit attacks must use the extended readable hit interval');
 if (!script.includes("UI.traitActivation('attack'") || !script.includes("UI.traitActivation('vitality'")) fail('Attack and vitality traits must trigger dedicated animations');
 if (!html.includes('.trait-activation.attack') || !html.includes('.trait-activation.vitality') || !html.includes('.damage-number.multi-hit')) fail('Trait and multi-hit visual styles are missing');
 if ([...script.matchAll(/State\.hp\s*-=\s*card\.self_dmg/g)].length) fail('Card recoil must use the nonlethal shared handler');
 if ((script.match(/反動ではHP1未満にならない/g) || []).length < 2) fail('Upgraded recoil cards must retain their nonlethal description');
-const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+const readmeUrl = new URL('../README.md', import.meta.url);
+const readme = fs.existsSync(readmeUrl) ? fs.readFileSync(readmeUrl, 'utf8') : null;
 for (const effect of ['tiger_form','mana_forge','second_heart','chain_art','mana_reactor','blood_pact','healing_strike','apex_str','apex_int','apex_hp']) {
     if (!script.includes(`card.effect === '${effect}'`)) fail(`Level reward effect is not implemented: ${effect}`);
 }
-for (const extra of ['combo_cashout','mana_resonance','vitality_wave']) {
+for (const extra of ['combo_cashout','vitality_wave']) {
     if (!unlockCards.some(card => card.extra === extra) || !script.includes(`card.extra === '${extra}'`)) fail(`Missing level reward scaling mechanic: ${extra}`);
 }
-if (!readme.includes('| 10 | 極・闘神化 | 極・魔導核 | 極・生命天輪 |')) fail('README must document the complete level 2-10 reward schedule');
+if (!unlockCards.some(card => card.effect === 'mana_echo') || !script.includes("card.effect === 'mana_echo'")) fail('Dragon Vein Resonance must use its new temporary-mana echo mechanic');
+if (readme && !readme.includes('| 10 | 極・闘神化 | 極・魔導核 | 極・生命天輪 |')) fail('README must document the complete level 2-10 reward schedule');
 if (!script.includes("State.playerType === 'hp'") || !script.includes("State.battle.bloodPact || .5") || !script.includes('State.maxHp * 0.08')) fail('Vitality buffs must include Blood Armor and stronger regeneration');
 if (!script.includes("State.playerType !== 'hp' && !State.battle.retainBlock") || (script.match(/State\.playerType === 'hp'\) State\.battle\.block = 0/g) || []).length < 2) fail('Vitality block must persist between turns and battles until a five-win checkpoint');
 for (const kind of ['normal','brute','trick','sprout','swarm','guardian','assassin','dragon','phoenix','colossus']) {
@@ -89,11 +102,12 @@ if (!script.includes('triggerEnemyPhase') || !script.includes('ENEMY_AFFIXES')) 
 if (!script.includes("State.battle.enemiesDefeated % 2 === 0") || !script.includes("id:'mentor_path'") || !script.includes("id:'altar'")) fail('Journey events must occur frequently and include build-changing choices');
 const journeySource = script.slice(script.indexOf('const JOURNEY_EVENTS'),script.indexOf('const ENEMY_ARCHETYPES'));
 if ((journeySource.match(/\bid:'/g) || []).length < 12) fail('Journey event pool must contain at least twelve distinct choices');
-if (!script.includes("bossReward = ' / 覚醒") || !readme.includes('敵の進化と道中イベント')) fail('Boss awakening rewards and the encounter redesign must be documented');
-if (!readme.includes('血潮の鎧') || !readme.includes('戦闘ルールそのものを変える')) fail('Vitality buffs and progression redesign must be documented');
-const undocumentedCards = CARDS_DB.filter(card => !readme.includes(`| ${card.name} |`));
+if (!script.includes("bossReward = ' / 覚醒")) fail('Boss awakening rewards must be implemented');
+if (readme && !readme.includes('敵の進化と道中イベント')) fail('README must document the encounter redesign');
+if (readme && (!readme.includes('血潮の鎧') || !readme.includes('戦闘ルールそのものを変える'))) fail('Vitality buffs and progression redesign must be documented');
+const undocumentedCards = readme ? CARDS_DB.filter(card => !readme.includes(`| ${card.name} |`)) : [];
 if (undocumentedCards.length) fail(`Cards missing from README: ${undocumentedCards.map(card => card.id).join(', ')}`);
-if (!readme.includes('一時魔力') || !readme.includes('ショップまたは秘伝の改造へ到達すると0')) fail('README must explain temporary mana persistence and reset timing');
+if (readme && (!readme.includes('一時魔力') || !readme.includes('ショップまたは秘伝の改造へ到達すると0'))) fail('README must explain temporary mana persistence and reset timing');
 if (!script.includes('State.tempMana += manaGain') || !script.includes('State.tempMana -= manaSpent')) fail('Temporary mana must have explicit gain and spend handling');
 if (!script.includes('visitShop: () => {') || !script.includes('visitSecretMode: () => {') || (script.match(/State\.tempMana = 0/g) || []).length < 3) fail('Temporary mana must reset at run start, shop, and secret mode');
 const barrier = CARDS_DB.find(card => card.id === 'barrier');
@@ -102,8 +116,8 @@ const manaBurst = CARDS_DB.find(card => card.id === 'mana_burst');
 if (manaBurst.extra !== 'temp_mana_burst' || !manaBurst.consumeAllMana || manaBurst.manaCost !== 3) fail('Mana Burst must consume the temporary-mana pool with a minimum cost');
 if (!script.includes("transcribe:{ cost:3") || !script.includes("phase:{ cost:5") || !script.includes("compress:{ cost:8")) fail('All three arcane arts must be implemented with explicit costs');
 if (!script.includes('State.battle.manaAbsorb') || !script.includes("UI.traitActivation('magic','位相転換'")) fail('Phase Shift must nullify an attack with dedicated feedback');
-if (!readme.includes('魔導転写') || !readme.includes('位相転換') || !readme.includes('時間圧縮')) fail('README must document all arcane arts');
-if (CARDS_DB.some(card => card.id === 'absolute_barrier') || readme.includes('| 絶対防御 |')) fail('Absolute Defense must be removed from the card pool and documentation');
+if (readme && (!readme.includes('魔導転写') || !readme.includes('位相転換') || !readme.includes('時間圧縮'))) fail('README must document all arcane arts');
+if (CARDS_DB.some(card => card.id === 'absolute_barrier') || (readme && readme.includes('| 絶対防御 |'))) fail('Absolute Defense must be removed from the card pool and documentation');
 for (const id of ['spark','fireball','frost','grimoire','future_sight']) {
     if (!['sacrifice_circuit','void_distill','anomaly_formula','paradox_refund','future_clone'].includes(SECRET_MOD_BY_CARD[id])) fail(`Magic card ${id} must use a redesigned secret modification`);
 }
@@ -114,23 +128,32 @@ const limitBreak = CARDS_DB.find(card => card.id === 'limit_break');
 const worldTree = CARDS_DB.find(card => card.id === 'world_tree');
 if (bloodSucker.val > 1.8 || bloodSucker.drainRate > .4 || limitBreak.val > 6 || limitBreak.hpCost < 10 || worldTree.val > 20 || worldTree.healRate > .3) fail('Final cross-job rare-card balance adjustments must remain applied');
 if (!script.includes("State.maxHp = 65; State.hp = 65") || !script.includes("Game.addCard('body_press')")) fail('Vitality starter stats and risk card must remain explicit');
-if (!script.includes('Game.spendHp(State.hp * card.hpCostScale)') || !readme.includes('体力型の設計')) fail('Vitality HP-spending identity must be implemented and documented');
-if (!script.includes('Math.ceil(State.maxHp * card.healRate)') || !readme.includes('回復カードは最大HPに対する割合')) fail('Ratio healing must be implemented and documented');
+if (!script.includes('Game.spendHp(State.hp * card.hpCostScale)')) fail('Vitality HP-spending identity must be implemented');
+if (readme && !readme.includes('体力型の設計')) fail('Vitality HP-spending identity must be documented');
+if (!script.includes('Math.ceil(State.maxHp * card.healRate)')) fail('Ratio healing must be implemented');
+if (readme && !readme.includes('回復カードは最大HPに対する割合')) fail('Ratio healing must be documented');
 if (!script.includes('BALANCE_V2_IDS') || !script.includes('applyCardUpgradeValues(card)')) fail('Existing saved cards must migrate to the new balance without losing upgrades');
 if ((script.match(/Game\.isCardUnlocked\(c\)/g) || []).length < 3) fail('Locked cards must be filtered from shop, normal rewards, and rare rewards');
 if (!script.includes('playerXp') || !script.includes('levelFromXp') || !script.includes('State.runXpEarned = 20 + defeated * 10')) fail('Persistent player experience and level calculation are missing');
+if (!script.includes("DEBUG_ALL_CARDS || !card.unlockLevel") || !server.includes("--debug-all-cards") || !pkg.scripts?.debug?.includes("--debug-all-cards")) fail('All-card debug mode must unlock cards without overwriting normal progression');
 if (!script.includes("UI.toast('【特性】連撃の呼吸！ 行動権+1・1枚ドロー')") || !script.includes('State.battle.combo >= 3')) fail('Attack archetype must trigger its once-per-turn combo flow at three hits');
 if (!script.includes('1 + vulnerableStacks * .5') || !script.includes('State.battle.enemyVulnerable = 0')) fail('Vulnerability must stack without a cap and be consumed all at once by the next attack');
-if (!script.includes("anchor: { name:'重装化'") || !script.includes("card.secretMod === 'anchor') blk = Math.ceil(blk * 1.5)") || readme.includes('不動結界')) fail('Obsolete block retention secret must be replaced by the 50% Heavy Armor bonus');
-if (!script.includes('let breakthroughMultiplier = State.battle.breakthrough || 1') || !script.includes('if (State.battle.breakthrough) amount = Math.floor(amount * State.battle.breakthrough)')) fail('Physical and magical damage previews must include Breakthrough');
-if (!readme.includes('攻撃型の設計') || !readme.includes('1ターンに1回だけ発動')) fail('Attack archetype design and trait limit must be documented');
+if (!script.includes('State.battle.echo = (Number(State.battle.echo) || 0) + 1') || !script.includes('echoIndex<echoStacks')) fail('Echo must stack and repeat the next spell once per stack');
+if ((script.match(/State\.battle\.manaForge \+= forgeGain/g) || []).length < 2) fail('Mana Forge and Apex Magic Core must add their mana-gain bonuses instead of overwriting each other');
+if (!script.includes("reignition ? '再引火' : '引火爆発'") || !script.includes("reignition ? .2 : .3") || !script.includes('State.tempMana += 10')) fail('Burn reapplication must trigger ignition for 30% max HP and grant 10 temporary mana');
+if (!script.includes('enemyIgnited') || !script.includes('Math.ceil(manaBefore*1.5)') || !script.includes("'MAX HP 20% / MANA ×1.5'")) fail('Further burn reapplications must reignite for 20% max HP and multiply current temporary mana by 1.5');
+if (!script.includes("anchor: { name:'重装化'") || !script.includes("card.secretMod === 'anchor') blk = Math.ceil(blk * 1.5)") || (readme && readme.includes('不動結界'))) fail('Obsolete block retention secret must be replaced by the 50% Heavy Armor bonus');
+if (!script.includes('let breakthroughMultiplier = State.battle.breakthrough || 1') || !script.includes('castIndex === 0 && State.battle.breakthrough')) fail('Physical and magical damage previews must include Breakthrough');
+if (readme && (!readme.includes('攻撃型の設計') || !readme.includes('1ターンに1回だけ発動'))) fail('Attack archetype design and trait limit must be documented');
 if (!script.includes("State.playerType === 'str' && Math.random() < 0.1") || !script.includes('Math.floor(dmg * 1.5)') || !script.includes("UI.traitActivation('attack','クロスカウンター'")) fail('Attack archetype must dodge and counter at 1.5x power with a dedicated cut-in');
-if (!readme.includes('クロスカウンター') || !readme.includes('10%の確率で完全回避')) fail('Cross Counter must be documented');
+if (readme && (!readme.includes('クロスカウンター') || !readme.includes('10%の確率で完全回避'))) fail('Cross Counter must be documented');
 const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
 for (const id of ['result-player-level','result-xp-earned','result-xp-bar','result-unlock-list']) if (!htmlIds.has(id)) fail(`Player progression result UI is missing: ${id}`);
 for (const id of ['deck-viewer','deck-viewer-grid','card-library','card-library-grid','library-progress']) if (!htmlIds.has(id)) fail(`Missing collection UI: ${id}`);
+for (const id of ['announcements-modal','announcements-title','announcements-list']) if (!htmlIds.has(id)) fail(`Missing announcement UI: ${id}`);
 if (!script.includes('openDeckViewer:') || !script.includes('renderDeckViewer:') || !html.includes("Game.openDeckViewer('draw')") || !html.includes("Game.openDeckViewer('deck')")) fail('Battle and journey screens must expose the deck viewer');
 if (!script.includes('openCardLibrary:') || !script.includes('renderCardLibrary:') || !html.includes('Game.openCardLibrary()')) fail('Title screen card library is not fully connected');
+if (!script.includes('openAnnouncements:') || !script.includes('renderAnnouncements:') || !script.includes("title:'お知らせページを新設'") || !html.includes('Game.openAnnouncements()')) fail('Title screen announcements are not fully connected');
 if (!html.includes('@keyframes titlePalBurst') || !html.includes('title-pal hp') || !html.includes('title-pal str') || !html.includes('title-pal int')) fail('Animated title characters are missing');
 const referencedIds = new Set([...script.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g)].map(match => match[1]));
 const missingIds = [...referencedIds].filter(id => !htmlIds.has(id));

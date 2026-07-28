@@ -3,3 +3,6 @@ node_modules/
 *-screen.png
 *-shot.png
 npm-debug.log*
+
+# カード仕様はローカル運用のみ。公開リポジトリへ含めない。
+/README.md
