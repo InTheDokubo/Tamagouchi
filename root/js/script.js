@@ -2159,15 +2159,16 @@ const UI = {
         explosion.className = `ignition-explosion${reignition ? ' reignition' : ''}`;
         explosion.style.left = `${x}px`;
         explosion.style.top = `${y}px`;
-        explosion.innerHTML = '<i></i><i></i><i></i>';
+        explosion.innerHTML = '<i></i><i></i>';
         layer.appendChild(explosion);
-        UI.burst('enemy-sprite',reignition ? '#f0abfc' : '#fbbf24',reignition ? 48 : 40);
-        UI.burst('enemy-sprite',reignition ? '#a855f7' : '#f97316',reignition ? 34 : 28,70);
+        const lightweight = matchMedia('(max-width: 767px), (pointer: coarse)').matches;
+        const particleCount = lightweight ? (reignition ? 12 : 10) : (reignition ? 24 : 20);
+        UI.burst('enemy-sprite',reignition ? '#e879f9' : '#fb923c',particleCount);
         UI.flash(reignition ? 'mag' : 'rare');
-        UI.animShake('#scene-battle');
-        requestAnimationFrame(() => UI.hitStop(reignition ? 155 : 125));
+        if (!lightweight) UI.animShake('#scene-battle');
+        requestAnimationFrame(() => UI.hitStop(lightweight ? 70 : (reignition ? 120 : 100)));
         if (navigator.vibrate && !matchMedia('(prefers-reduced-motion: reduce)').matches) navigator.vibrate(reignition ? [35,25,55] : [28,20,42]);
-        setTimeout(() => explosion.remove(), 950);
+        setTimeout(() => explosion.remove(), 720);
     },
     consumeCard: async (clone, tier, x, y, type) => {
         const colors = { phys:'#fb7185', mag:'#a78bfa', def:'#60a5fa', heal:'#4ade80', buff:'#fbbf24', skill:'#c084fc' };
