@@ -142,6 +142,10 @@ if (!script.includes('State.battle.echo = (Number(State.battle.echo) || 0) + 1')
 if ((script.match(/State\.battle\.manaForge \+= forgeGain/g) || []).length < 2) fail('Mana Forge and Apex Magic Core must add their mana-gain bonuses instead of overwriting each other');
 if (!script.includes("reignition ? '再引火' : '引火爆発'") || !script.includes("reignition ? .2 : .3") || !script.includes('State.tempMana += 10')) fail('Burn reapplication must trigger ignition for 30% max HP and grant 10 temporary mana');
 if (!script.includes('enemyIgnited') || !script.includes('Math.ceil(manaBefore*1.5)') || !script.includes("'MAX HP 20% / MANA ×1.5'")) fail('Further burn reapplications must reignite for 20% max HP and multiply current temporary mana by 1.5');
+if (script.indexOf('if (card.burn) Game.applyBurn(card.burn)') > script.indexOf("if (card.type === 'phys')")) fail('Burn and ignition abilities must resolve before the card attack');
+if (!script.includes('ignitionExplosion:') || !script.includes('UI.ignitionExplosion(reignition)') || !html.includes('.ignition-explosion')) fail('Ignition and reignition must use their dedicated explosion effect');
+if (!script.includes('State.battle.pendingFx = Math.max(State.battle.pendingFx || 0, 500)')) fail('Lethal ignition must delay victory long enough to show its cut-in and explosion');
+if (!script.includes("heading:'炎上コンボ'") || !html.includes('.notice-body h3')) fail('Balance announcements must use readable headings and structured body text');
 if (!script.includes("anchor: { name:'重装化'") || !script.includes("card.secretMod === 'anchor') blk = Math.ceil(blk * 1.5)") || (readme && readme.includes('不動結界'))) fail('Obsolete block retention secret must be replaced by the 50% Heavy Armor bonus');
 if (!script.includes('let breakthroughMultiplier = State.battle.breakthrough || 1') || !script.includes('castIndex === 0 && State.battle.breakthrough')) fail('Physical and magical damage previews must include Breakthrough');
 if (readme && (!readme.includes('攻撃型の設計') || !readme.includes('1ターンに1回だけ発動'))) fail('Attack archetype design and trait limit must be documented');

@@ -92,7 +92,23 @@ const ANNOUNCEMENTS = [
         id:'magic-plan-rework',
         date:'2026.07.28',
         title:'魔力型バランス調整のお知らせ',
-        body:'魔力型の連携と火力バランスを更新しました。禁術・星喰いは一時魔力1につき固定8ダメージを加える方式へ変更し、龍脈共鳴は次の一時魔力獲得を複製する能力へ再設計。残響は重ねがけ可能になり、魔力炉と極・魔導核の獲得補正も重複します。炎上中に炎上を重ねると最大HP30%ダメージと一時魔力+10の「引火爆発」、同じ敵へさらに重ねると最大HP20%ダメージと現在の一時魔力×1.5の「再引火」が発生します。炎魔法にも炎上6を追加しました。'
+        intro:'魔力型の連携と火力バランスを更新しました。',
+        sections:[
+            { heading:'カード調整', items:[
+                '禁術・星喰い：一時魔力1につき固定8ダメージを加える方式へ変更',
+                '龍脈共鳴：次の一時魔力獲得を複製する能力へ再設計',
+                '炎魔法：炎上6を追加'
+            ]},
+            { heading:'重ねがけの強化', items:[
+                '残響は重ねがけ可能になり、2回使うと次の魔法が合計3回発動',
+                '魔力炉と極・魔導核の一時魔力獲得補正が重複'
+            ]},
+            { heading:'炎上コンボ', items:[
+                '引火爆発：炎上中に炎上を重ねると最大HP30%ダメージ・一時魔力+10',
+                '再引火：同じ敵へさらに炎上を重ねると最大HP20%ダメージ・現在の一時魔力×1.5',
+                '炎上・引火・再引火はカード本体の攻撃より先に発動'
+            ]}
+        ]
     },
     {
         id:'news-page-launch',
@@ -875,6 +891,10 @@ const Game = {
             State.battle.lastCardType = card.type;
         }
 
+        // 炎上系の付与・爆発はカード本体の攻撃より先に解決する。
+        // 致死ダメージのカードでも、引火／再引火の能力と演出を取りこぼさない。
+        if (card.burn) Game.applyBurn(card.burn);
+
         if (card.type === 'phys') {
             let dmg = Math.floor(str * card.val);
             if (card.extra === 'hp_scale') dmg += Math.floor(State.hp * 0.1);
@@ -1094,7 +1114,6 @@ const Game = {
         if (card.effect === 'retain_block') State.battle.retainBlock = true;
         if (card.vulnerable) State.battle.enemyVulnerable += card.vulnerable;
         if (card.secretMod === 'rupture') { State.battle.enemyVulnerable += 1; UI.toast('【秘伝】脆弱を追加！'); }
-        if (card.burn) Game.applyBurn(card.burn);
         if (card.freeze) State.battle.enemyFrozen = true;
         if (card.thorns) State.battle.thorns += card.thorns;
         if (card.secretMod === 'anomaly_formula') {
@@ -1221,8 +1240,10 @@ const Game = {
                 State.tempMana += 10;
                 State.battle.enemyIgnited = true;
             }
+            // 致死爆発でも勝利演出へ急いで遷移せず、爆発とカットインを見せ切る。
+            State.battle.pendingFx = Math.max(State.battle.pendingFx || 0, 500);
             UI.flash('rare');
-            UI.burst('enemy-sprite',reignition ? '#e879f9' : '#fb923c',reignition ? 30 : 24);
+            UI.ignitionExplosion(reignition);
             UI.hitEnemy(dealt,'mag',true,80,false);
             UI.traitActivation(
                 'magic',
@@ -1956,7 +1977,11 @@ const UI = {
             const item = document.createElement('details');
             item.className = 'notice-item rounded-2xl overflow-hidden';
             if (index === 0) item.open = true;
-            item.innerHTML = `<summary class="cursor-pointer select-none flex items-center gap-3 p-4 md:p-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-yellow-300"><span class="w-10 h-10 rounded-xl bg-pink-400/15 text-pink-200 grid place-items-center shrink-0"><i class="fas fa-bullhorn"></i></span><span class="min-w-0 flex-1"><time class="block text-[9px] md:text-[10px] font-black tracking-wider text-indigo-200">${notice.date}</time><span class="block text-sm md:text-base font-black mt-0.5">${notice.title}</span></span><span class="notice-chevron text-yellow-300 shrink-0"><i class="fas fa-chevron-down"></i></span></summary><div class="border-t border-white/10 px-4 pb-4 pt-3 md:px-5 md:pb-5 text-xs md:text-sm leading-relaxed text-indigo-100">${notice.body}</div>`;
+            const sections = (notice.sections || []).map(section => `<section><h3>${section.heading}</h3><ul>${section.items.map(itemText => `<li>${itemText}</li>`).join('')}</ul></section>`).join('');
+            const body = notice.sections
+                ? `<div class="notice-lead">${notice.intro || ''}</div>${sections}`
+                : `<p>${notice.body}</p>`;
+            item.innerHTML = `<summary class="cursor-pointer select-none flex items-center gap-3 p-4 md:p-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-yellow-300"><span class="w-10 h-10 rounded-xl bg-pink-400/15 text-pink-200 grid place-items-center shrink-0"><i class="fas fa-bullhorn"></i></span><span class="min-w-0 flex-1"><time class="block text-[9px] md:text-[10px] font-black tracking-wider text-indigo-200">${notice.date}</time><span class="block text-sm md:text-base font-black mt-0.5">${notice.title}</span></span><span class="notice-chevron text-yellow-300 shrink-0"><i class="fas fa-chevron-down"></i></span></summary><div class="notice-body border-t border-white/10 px-4 pb-5 pt-4 md:px-6 md:pb-6">${body}</div>`;
             list.appendChild(item);
         });
     },
@@ -2120,6 +2145,29 @@ const UI = {
             p.style.setProperty('--dx', `${Math.cos(angle)*distance}px`); p.style.setProperty('--dy', `${Math.sin(angle)*distance}px`); p.style.setProperty('--particle', color);
             p.style.animationDelay = `${delay}ms`; layer.appendChild(p); setTimeout(()=>p.remove(), delay+700);
         }
+    },
+    ignitionExplosion: (reignition = false) => {
+        const layer = document.getElementById('battle-fx-layer');
+        const target = document.getElementById('enemy-sprite');
+        const scene = document.getElementById('scene-battle');
+        if (!layer || !target || !scene) return;
+        const rect = target.getBoundingClientRect();
+        const base = scene.getBoundingClientRect();
+        const x = rect.left-base.left+rect.width/2;
+        const y = rect.top-base.top+rect.height/2;
+        const explosion = document.createElement('div');
+        explosion.className = `ignition-explosion${reignition ? ' reignition' : ''}`;
+        explosion.style.left = `${x}px`;
+        explosion.style.top = `${y}px`;
+        explosion.innerHTML = '<i></i><i></i><i></i>';
+        layer.appendChild(explosion);
+        UI.burst('enemy-sprite',reignition ? '#f0abfc' : '#fbbf24',reignition ? 48 : 40);
+        UI.burst('enemy-sprite',reignition ? '#a855f7' : '#f97316',reignition ? 34 : 28,70);
+        UI.flash(reignition ? 'mag' : 'rare');
+        UI.animShake('#scene-battle');
+        requestAnimationFrame(() => UI.hitStop(reignition ? 155 : 125));
+        if (navigator.vibrate && !matchMedia('(prefers-reduced-motion: reduce)').matches) navigator.vibrate(reignition ? [35,25,55] : [28,20,42]);
+        setTimeout(() => explosion.remove(), 950);
     },
     consumeCard: async (clone, tier, x, y, type) => {
         const colors = { phys:'#fb7185', mag:'#a78bfa', def:'#60a5fa', heal:'#4ade80', buff:'#fbbf24', skill:'#c084fc' };
