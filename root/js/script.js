@@ -1241,7 +1241,7 @@ const Game = {
                 State.battle.enemyIgnited = true;
             }
             // 致死爆発でも勝利演出へ急いで遷移せず、爆発とカットインを見せ切る。
-            State.battle.pendingFx = Math.max(State.battle.pendingFx || 0, 500);
+            State.battle.pendingFx = Math.max(State.battle.pendingFx || 0, 400);
             UI.flash('rare');
             UI.ignitionExplosion(reignition);
             UI.hitEnemy(dealt,'mag',true,80,false);
@@ -2162,11 +2162,10 @@ const UI = {
         explosion.innerHTML = '<i></i><i></i>';
         layer.appendChild(explosion);
         const lightweight = matchMedia('(max-width: 767px), (pointer: coarse)').matches;
-        const particleCount = lightweight ? (reignition ? 12 : 10) : (reignition ? 24 : 20);
+        const particleCount = lightweight ? (reignition ? 10 : 8) : (reignition ? 16 : 14);
         UI.burst('enemy-sprite',reignition ? '#e879f9' : '#fb923c',particleCount);
         UI.flash(reignition ? 'mag' : 'rare');
-        if (!lightweight) UI.animShake('#scene-battle');
-        requestAnimationFrame(() => UI.hitStop(lightweight ? 70 : (reignition ? 120 : 100)));
+        requestAnimationFrame(() => UI.hitStop(lightweight ? 40 : (reignition ? 75 : 60)));
         if (navigator.vibrate && !matchMedia('(prefers-reduced-motion: reduce)').matches) navigator.vibrate(reignition ? [35,25,55] : [28,20,42]);
         setTimeout(() => explosion.remove(), 720);
     },
