@@ -61,7 +61,7 @@ export const CARDS_DB = [
     { id: 'rest', name: '深呼吸', type: 'heal', attr: 'hp', val: 0, healRate: 0.35, exhaust: true, desc: '最大HPの35%回復。[1回のみ]', icon: 'fa-spa' },
     { id: 'muscle', name: 'ビルドアップ', type: 'heal', attr: 'hp', val: 0, healRate: 0.15, add_action: true, exhaust: true, desc: '最大HPの15%回復。続けて行動。[1回のみ]', icon: 'fa-heartbeat' },
     { id: 'counter', name: '構える', type: 'def', attr: 'common', val: 15, desc: 'ブロック15を得る。', icon: 'fa-hand-paper' },
-    { id: 'life_share', name: '生命転換', type: 'phys', attr: 'hp', val: 0, extra: 'block_hp_sacrifice', scale: 0.15, blockMult: 1.5, extraMult: 2.5, desc: '全ブロックを消費。現在HP15%も消費し、ブロックの1.5倍＋消費HPの2.5倍ダメージ（HP1で止まる）。', icon: 'fa-balance-scale' },
+    { id: 'life_share', name: '生命転換', type: 'phys', attr: 'hp', val: 0, extra: 'block_hp_sacrifice', scale: 0.15, blockMult: 1.5, extraMult: 2.5, desc: '現在の全ブロック値を参照し、現在HP15%を消費。ブロックの1.5倍＋消費HPの2.5倍ダメージ。ブロックは消費しない（HP1で止まる）。', icon: 'fa-balance-scale' },
     { id: 'endure', name: '不屈', type: 'def', attr: 'hp', val: 30, exhaust: true, desc: 'ブロック30を得る。[1回のみ]', icon: 'fa-mountain' },
     { id: 'body_press', name: 'ボディプレス', type: 'phys', attr: 'hp', val: 0, extra: 'maxhp_scale', scale: 0.3, hpCostScale: 0.1, desc: '最大HPの30%ダメージ。現在HPを10%消費（HP1で止まる）。', icon: 'fa-weight-hanging' },
     { id: 'fortify', name: '要塞化', type: 'def', attr: 'hp', val: 12, effect: 'retain_block', exhaust: true, desc: 'ブロック12。次のターンまでブロックを保持。[1回のみ]', icon: 'fa-chess-rook' },

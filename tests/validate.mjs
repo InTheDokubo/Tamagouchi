@@ -40,7 +40,7 @@ const vitalityCards = Object.fromEntries(CARDS_DB.filter(card => card.attr === '
 if (vitalityCards.bandage.healRate < .18 || vitalityCards.second_wind.healRate < .2 || vitalityCards.iron_will.val < 8) fail('Vitality archetype needs a reliable recovery and defense floor');
 if (vitalityCards.muscle.effect === 'maxhp_up' || vitalityCards.muscle.val !== 0 || vitalityCards.muscle.healRate !== .15) fail('Build Up must heal by ratio without increasing max HP');
 if (vitalityCards.body_press.extra !== 'maxhp_scale' || vitalityCards.body_press.scale !== .3 || vitalityCards.body_press.hpCostScale !== .1) fail('Body Press must trade 10% current HP for max-HP-scaled damage');
-if (vitalityCards.life_share.extra !== 'block_hp_sacrifice' || vitalityCards.life_share.scale !== .15 || vitalityCards.life_share.blockMult !== 1.5 || vitalityCards.life_share.extraMult !== 2.5) fail('Life Conversion must consume all block and current HP for its hybrid attack');
+if (vitalityCards.life_share.extra !== 'block_hp_sacrifice' || vitalityCards.life_share.scale !== .15 || vitalityCards.life_share.blockMult !== 1.5 || vitalityCards.life_share.extraMult !== 2.5 || !vitalityCards.life_share.desc.includes('ブロックは消費しない')) fail('Life Conversion must reference all block without consuming it and spend only current HP');
 if (vitalityCards.grand_slam.extra !== 'hp_halve_press' || vitalityCards.grand_slam.extraMult < 2.75) fail('Press must remain the vitality archetype high-risk finisher');
 
 if (CARDS_DB.length < 60) fail(`Expected a broad card pool, found ${CARDS_DB.length}`);
@@ -79,6 +79,9 @@ if (mastersRead.extra !== 'sword_saint_read' || mastersRead.val !== 2.4 || !scri
 const zanshin = CARDS_DB.find(card => card.id === 'zanshin');
 if (!zanshin || zanshin.unlockLevel !== 7 || zanshin.effect !== 'combo_retain' || CARDS_DB.some(card => card.id === 'read_blade')) fail('Future Slash must be replaced by the combo-retaining Zanshin card');
 if (!html.includes('font-awesome/6.7.2/css/all.min.css') || CARDS_DB.some(card => card.icon === 'fa-phoenix-framework')) fail('Card icons must use the supported Font Awesome set');
+const lifeConversionSource = script.slice(script.indexOf("if (card.extra === 'block_hp_sacrifice')",script.indexOf('executeCardLogic:')),script.indexOf("if (card.extra === 'hp_sacrifice_blast')",script.indexOf("if (card.extra === 'block_hp_sacrifice')",script.indexOf('executeCardLogic:'))));
+if (lifeConversionSource.includes('State.battle.block = 0') || !lifeConversionSource.includes('referencedBlock')) fail('Life Conversion must preserve block after referencing its full value');
+if (!script.includes("title:'大幅アップデート'") || !script.includes("id:'major-level-20-update'") || script.includes("id:'counter-vitality-card-rework'") || script.includes("id:'player-level-20-rewards'")) fail('Level 20 rewards and plan balance notes must be consolidated into the major update announcement');
 if (!script.includes('const MULTI_HIT_INTERVAL = 145') || !script.includes('multiHit:true')) fail('Multi-hit attacks must use the extended readable hit interval');
 if (!script.includes("UI.traitActivation('attack'") || !script.includes("UI.traitActivation('vitality'")) fail('Attack and vitality traits must trigger dedicated animations');
 if (!html.includes('.trait-activation.attack') || !html.includes('.trait-activation.vitality') || !html.includes('.damage-number.multi-hit')) fail('Trait and multi-hit visual styles are missing');

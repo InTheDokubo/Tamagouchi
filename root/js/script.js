@@ -89,26 +89,16 @@ const SECRET_MOD_COST = 100;
 // 公開コミットでは、プレイヤー向けの変更をこの一覧の先頭へ追加する。
 const ANNOUNCEMENTS = [
     {
-        id:'counter-vitality-card-rework',
+        id:'major-level-20-update',
         date:'2026.07.29',
-        title:'攻撃型・体力型カード再調整',
-        intro:'意図読みカードと体力型のブロック活用を再設計し、カードアイコンの表示互換性も改善しました。',
+        title:'大幅アップデート',
+        intro:'プレイヤーレベル20までのカード報酬と、各プランの戦略を深める個別バランス調整を実施しました。',
         sections:[
-            { heading:'剣聖の見切り', items:['通常攻撃には必ず回避して威力3倍','通常攻撃以外には1枚ドロー・続けて行動']},
-            { heading:'カード差し替え', items:['未来斬りを削除','Lv7報酬に、コンボを次ターンへ持ち越す「残心」を追加']},
-            { heading:'生命転換', items:['全ブロックと現在HP15%を消費','ブロック1.5倍＋消費HP2.5倍の複合ダメージへ変更']},
-            { heading:'表示改善', items:['Font Awesomeを更新し、表示できない新規カードアイコンを互換アイコンへ交換']}
-        ]
-    },
-    {
-        id:'player-level-20-rewards',
-        date:'2026.07.29',
-        title:'プレイヤーレベル20報酬を追加',
-        intro:'Lv11〜20で、各プランに10枚ずつ、合計30枚の上級カードが解放されます。',
-        sections:[
-            { heading:'攻撃型', items:['コンボをドロー・防御・追撃へ変換する新ルートを追加','Lv20「神速領域」で、すべての物理攻撃に追撃を付与']},
-            { heading:'魔力型', items:['炎上変換、除外札回収、魔力によるダメージ肩代わりを追加','Lv20「万象魔典」で、3回ごとの連続詠唱を構築可能']},
-            { heading:'体力型', items:['過剰回復、HP消費時ドロー、ブロック再利用を追加','Lv20「不死鳥心臓」で、一度だけ復活して態勢を立て直せる']}
+            { heading:'レベル20までカード報酬を拡張', items:['Lv11〜20で各プラン10枚ずつ、合計30枚の上級カードを追加','Lv15・Lv18・Lv20では、構築の核になるレアカードが各プランに1枚ずつ解放']},
+            { heading:'攻撃型の個別調整', items:['コンボをドロー・防御・追撃・次ターン持ち越しへ変換する戦略を追加','剣聖の見切りを強化し、未来斬りを新カード「残心」へ差し替え','Lv20「神速領域」で、すべての物理攻撃に追撃を付与']},
+            { heading:'魔力型の個別調整', items:['炎上変換、除外札回収、一時魔力によるダメージ肩代わりを追加','残響・魔力炉・引火爆発・再引火の連携を再調整','Lv20「万象魔典」で、魔法3回ごとの連続詠唱を構築可能']},
+            { heading:'体力型の個別調整', items:['過剰回復、HP消費時ドロー、ブロック再利用、復活を追加','生命転換はブロックを消費せず全ブロック値を火力に参照し、HPだけを代償として消費','Lv20「不死鳥心臓」で、一度だけ復活して態勢を立て直せる']},
+            { heading:'表示改善', items:['Font Awesomeを更新し、表示されない新規カードアイコンを互換アイコンへ交換']}
         ]
     },
     {
@@ -997,10 +987,9 @@ const Game = {
             }
             if (card.extra === 'block_hp_sacrifice') {
                 const cost = Game.spendHp(State.hp*(card.scale||.15));
-                const committedBlock = State.battle.block;
-                State.battle.block = 0;
-                dmg = Math.floor(committedBlock*(card.blockMult||1.5)+cost*(card.extraMult||2.5));
-                UI.toast(`生命転換：ブロック${committedBlock}とHP${cost}を攻撃へ変換`);
+                const referencedBlock = State.battle.block;
+                dmg = Math.floor(referencedBlock*(card.blockMult||1.5)+cost*(card.extraMult||2.5));
+                UI.toast(`生命転換：ブロック${referencedBlock}を保持したままHP${cost}を攻撃へ変換`);
             }
             if (card.extra === 'hp_sacrifice_blast') {
                 const cost = Game.spendHp(State.hp * (card.scale || .22));
@@ -1647,7 +1636,7 @@ const Game = {
         if (card.type === 'phys') {
             if (card.extra === 'hp_scale') main = `攻撃${pct(card.val)}%＋現在HP10%ダメージ`;
             else if (card.extra === 'hp_sacrifice') main = `現在HPを${pct(card.scale || .15)}%消費し、その${card.extraMult || 2.6}倍のダメージ（HP1で止まる）`;
-            else if (card.extra === 'block_hp_sacrifice') main = `全ブロックを消費。現在HPを${pct(card.scale||.15)}%消費し、ブロックの${card.blockMult||1.5}倍＋消費HPの${card.extraMult||2.5}倍ダメージ（HP1で止まる）`;
+            else if (card.extra === 'block_hp_sacrifice') main = `全ブロック値を参照（消費しない）。現在HPを${pct(card.scale||.15)}%消費し、ブロックの${card.blockMult||1.5}倍＋消費HPの${card.extraMult||2.5}倍ダメージ（HP1で止まる）`;
             else if (card.extra === 'hp_sacrifice_blast') main = `現在HPを${pct(card.scale || .22)}%消費し、その${card.extraMult || 3.4}倍のダメージ（HP1で止まる）`;
             else if (card.extra === 'block_dmg') main = `全ブロックを消費し、その${card.extraMult || 1}倍のダメージ`;
             else if (card.extra === 'maxhp_scale') main = `最大HPの${pct(card.scale || .3)}%ダメージ${card.hpCostScale ? `。現在HPを${pct(card.hpCostScale)}%消費（HP1で止まる）` : ''}`;
