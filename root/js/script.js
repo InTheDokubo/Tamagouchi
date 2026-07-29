@@ -89,6 +89,18 @@ const SECRET_MOD_COST = 100;
 // 公開コミットでは、プレイヤー向けの変更をこの一覧の先頭へ追加する。
 const ANNOUNCEMENTS = [
     {
+        id:'counter-vitality-card-rework',
+        date:'2026.07.29',
+        title:'攻撃型・体力型カード再調整',
+        intro:'意図読みカードと体力型のブロック活用を再設計し、カードアイコンの表示互換性も改善しました。',
+        sections:[
+            { heading:'剣聖の見切り', items:['通常攻撃には必ず回避して威力3倍','通常攻撃以外には1枚ドロー・続けて行動']},
+            { heading:'カード差し替え', items:['未来斬りを削除','Lv7報酬に、コンボを次ターンへ持ち越す「残心」を追加']},
+            { heading:'生命転換', items:['全ブロックと現在HP15%を消費','ブロック1.5倍＋消費HP2.5倍の複合ダメージへ変更']},
+            { heading:'表示改善', items:['Font Awesomeを更新し、表示できない新規カードアイコンを互換アイコンへ交換']}
+        ]
+    },
+    {
         id:'player-level-20-rewards',
         date:'2026.07.29',
         title:'プレイヤーレベル20報酬を追加',
@@ -158,6 +170,7 @@ const applyCardUpgradeValues = card => {
     if (card.thorns) card.thorns = Math.ceil(card.thorns * 1.5);
     card.name += '+';
     if (card.extra === 'hp_sacrifice') { card.scale = .12; card.extraMult = 3.4; }
+    if (card.extra === 'block_hp_sacrifice') { card.blockMult = 2; card.extraMult = 3.2; }
     if (card.extra === 'hp_sacrifice_blast') { card.scale = .18; card.extraMult = 4.2; }
     if (card.extra === 'hp_sacrifice_block') { card.scale = .1; card.extraMult = 3.2; }
     if (card.extra === 'missing_hp_damage') card.scale = .35;
@@ -186,7 +199,7 @@ const State = {
         enemyVulnerable: 0, enemyBurn: 0, enemyIgnited: false, enemyFrozen: false, thorns: 0, playerFrail: false,
         counterMagic:false, reflectNext:false, manaAbsorb:false, pendingManaRefund:0, secretClonedUids:[], arcaneArtsUsed:[], pendingFx:0, lastDrawnUids:[], magicCirculatedUids:[], strFlowTriggered:false,
         tigerForm:false, manaForge:0, manaReactor:false, manaEcho:0, secondHeart:false, bloodPact:false, healingStrike:false, chainArt:false, chainUsedThisTurn:false, breakthrough:false,
-        comboGuard:false, painRefund:0, hpFlow:false, hpFlowTriggered:false, painDividend:false, physEcho:0, manaArmor:false, comboThresholds:false, comboStepsClaimed:[],
+        comboGuard:false, comboNextTurn:0, painRefund:0, hpFlow:false, hpFlowTriggered:false, painDividend:false, physEcho:0, manaArmor:false, comboThresholds:false, comboStepsClaimed:[],
         ignitionEcho:false, hpInterest:false, apexPhysEcho:0, spellCadence:false, spellCadenceCount:0, phoenixHeart:false,
         hpSpentThisTurn:0, currentBattleRecorded:false
     }
@@ -239,6 +252,22 @@ const RunStorage = {
                     const wasUpgraded = Boolean(card.upgraded);
                     Object.keys(card).forEach(key => delete card[key]);
                     Object.assign(card, definition, preserved, { upgraded:false, balanceVersion:7 });
+                    if (wasUpgraded) applyCardUpgradeValues(card);
+                }
+                if (card.id === 'read_blade') {
+                    const replacement = CARDS_DB.find(item => item.id === 'zanshin');
+                    const preserved = { uid:card.uid, secretMod:card.secretMod };
+                    const wasUpgraded = Boolean(card.upgraded);
+                    Object.keys(card).forEach(key => delete card[key]);
+                    Object.assign(card, replacement, preserved, { upgraded:false, balanceVersion:7 });
+                    if (wasUpgraded) applyCardUpgradeValues(card);
+                }
+                if ((card.id === 'life_share' && card.extra !== 'block_hp_sacrifice') || (card.id === 'masters_read' && card.extra !== 'sword_saint_read')) {
+                    const replacement = CARDS_DB.find(item => item.id === card.id);
+                    const preserved = { uid:card.uid, secretMod:card.secretMod };
+                    const wasUpgraded = Boolean(card.upgraded);
+                    Object.keys(card).forEach(key => delete card[key]);
+                    Object.assign(card, replacement, preserved, { upgraded:false, balanceVersion:7 });
                     if (wasUpgraded) applyCardUpgradeValues(card);
                 }
                 if ((card.id === 'astral_collapse' && card.extra !== 'temp_mana_flat_burst') || (card.id === 'ley_resonance' && card.effect !== 'mana_echo')) {
@@ -680,7 +709,7 @@ const Game = {
         State.battle.tigerForm = false; State.battle.manaForge = 0; State.battle.manaReactor = false; State.battle.manaEcho = 0;
         State.battle.secondHeart = false; State.battle.bloodPact = false; State.battle.healingStrike = false;
         State.battle.chainArt = false; State.battle.chainUsedThisTurn = false; State.battle.breakthrough = false;
-        State.battle.comboGuard = false; State.battle.painRefund = 0; State.battle.hpFlow = false; State.battle.hpFlowTriggered = false;
+        State.battle.comboGuard = false; State.battle.comboNextTurn = 0; State.battle.painRefund = 0; State.battle.hpFlow = false; State.battle.hpFlowTriggered = false;
         State.battle.painDividend = false; State.battle.physEcho = 0; State.battle.manaArmor = false;
         State.battle.comboThresholds = false; State.battle.comboStepsClaimed = []; State.battle.ignitionEcho = false;
         State.battle.hpInterest = false; State.battle.apexPhysEcho = 0; State.battle.spellCadence = false; State.battle.spellCadenceCount = 0;
@@ -702,7 +731,8 @@ const Game = {
         State.battle.selectedHandIndex = null;
         State.battle.lastDrawnUids = [];
         State.battle.currentBattleRecorded = false;
-        State.battle.combo = State.battle.tigerForm || 0;
+        State.battle.combo = Math.max(State.battle.tigerForm || 0,State.battle.comboNextTurn || 0);
+        State.battle.comboNextTurn = 0;
         State.battle.cardsPlayed = 0;
         State.battle.damageThisTurn = 0;
         State.battle.lastCardType = null;
@@ -778,7 +808,7 @@ const Game = {
 
     getCardImpact: (card) => {
         if (card.rarity === 'rare' || card.val >= 4 || (card.hits || 1) >= 5 || ['hp_halve_press','maxhp_block'].includes(card.extra)) return 3;
-        if (['hp_sacrifice','maxhp_scale'].includes(card.extra)) return 2;
+        if (['hp_sacrifice','block_hp_sacrifice','maxhp_scale'].includes(card.extra)) return 2;
         if (card.val >= 2.2 || (card.hits || 1) >= 3 || card.exhaust) return 2;
         return 1;
     },
@@ -947,6 +977,11 @@ const Game = {
             State.battle.actionsLeft++;
             UI.toast('完全連携：2枚ドロー・続けて行動');
         }
+        if (card.extra === 'sword_saint_read' && State.battle.enemy.intent !== 'atk') {
+            Game.drawCards(1);
+            State.battle.actionsLeft++;
+            UI.toast('剣聖の見切り：敵の構えを読み、1枚ドロー・続けて行動');
+        }
 
         // 炎上系の付与・爆発はカード本体の攻撃より先に解決する。
         // 致死ダメージのカードでも、引火／再引火の能力と演出を取りこぼさない。
@@ -959,6 +994,13 @@ const Game = {
             if (card.extra === 'hp_sacrifice') {
                 const cost = Game.spendHp(State.hp * (card.scale || .15));
                 dmg = Math.floor(cost * (card.extraMult || 2.6));
+            }
+            if (card.extra === 'block_hp_sacrifice') {
+                const cost = Game.spendHp(State.hp*(card.scale||.15));
+                const committedBlock = State.battle.block;
+                State.battle.block = 0;
+                dmg = Math.floor(committedBlock*(card.blockMult||1.5)+cost*(card.extraMult||2.5));
+                UI.toast(`生命転換：ブロック${committedBlock}とHP${cost}を攻撃へ変換`);
             }
             if (card.extra === 'hp_sacrifice_blast') {
                 const cost = Game.spendHp(State.hp * (card.scale || .22));
@@ -974,6 +1016,11 @@ const Game = {
             }
             if (card.extra === 'execute' && State.battle.enemy.hp <= State.battle.enemy.maxHp * 0.3) dmg *= 2;
             if (card.extra === 'intent_counter' && ['heavy','drain'].includes(State.battle.enemy.intent)) dmg *= 2;
+            if (card.extra === 'sword_saint_read' && State.battle.enemy.intent === 'atk') {
+                dmg *= 3;
+                State.battle.enemyFrozen = true;
+                UI.traitActivation('attack','剣聖の見切り','EVADE / DAMAGE ×3');
+            }
             if (card.extra === 'hp_halve_press') {
                 // プレス強化: 現在HPを半分にし、消費分の3倍ダメージ
                 const cost = Game.spendHp(State.hp * (card.scale || .5));
@@ -1185,6 +1232,9 @@ const Game = {
                 State.battle.combo -= exchanged;
                 Game.drawCards(exchanged);
                 UI.toast(`拍子替え：コンボ${exchanged}をドローへ変換`);
+            } else if (card.effect === 'combo_retain') {
+                State.battle.comboNextTurn = Math.min(card.upgraded ? 7 : 5,State.battle.combo);
+                UI.toast(`残心：次ターン開始コンボ${State.battle.comboNextTurn}`);
             } else if (card.effect === 'pain_refund') {
                 State.battle.painRefund = card.upgraded ? .8 : .6;
                 UI.toast(`痛覚遮断：次のHP消費を${Math.round(State.battle.painRefund*100)}%回復`);
@@ -1477,6 +1527,11 @@ const Game = {
                 hpCost = Math.min(Math.max(0,State.hp-1),Math.floor(State.hp*(card.scale||.15)));
                 amount = Math.floor(hpCost * (card.extraMult || 2.6));
             }
+            if (card.extra === 'block_hp_sacrifice') {
+                hpCost = Math.min(Math.max(0,State.hp-1),Math.floor(State.hp*(card.scale||.15)));
+                const projectedBlock = State.battle.block + (State.playerType === 'hp' ? Math.max(1,Math.floor(hpCost*(State.battle.bloodPact||.5))) : 0);
+                amount = Math.floor(projectedBlock*(card.blockMult||1.5)+hpCost*(card.extraMult||2.5));
+            }
             if (card.extra === 'hp_sacrifice_blast') {
                 hpCost = Math.min(Math.max(0,State.hp-1),Math.floor(State.hp*(card.scale||.22)));
                 amount = Math.floor(hpCost * (card.extraMult || 3.4));
@@ -1499,6 +1554,7 @@ const Game = {
             }
             if (card.extra === 'execute' && State.battle.enemy.hp <= State.battle.enemy.maxHp * .3) amount *= 2;
             if (card.extra === 'intent_counter' && ['heavy','drain'].includes(State.battle.enemy.intent)) amount *= 2;
+            if (card.extra === 'sword_saint_read' && State.battle.enemy.intent === 'atk') amount *= 3;
             const hits = card.extra === 'combo_hit_bonus' && State.battle.combo >= 4 ? 4 : (card.hits || 1);
             let enemyBlock = card.extra === 'shatter_block' ? 0 : (State.battle.enemy.block || 0);
             let vulnerableStacks = State.battle.enemyVulnerable;
@@ -1521,7 +1577,8 @@ const Game = {
             if (State.battle.physEcho > 0) total += Math.floor(amount*hits*State.battle.physEcho);
             if (State.battle.apexPhysEcho > 0) total += Math.floor(amount*hits*State.battle.apexPhysEcho);
             const flowReady = State.playerType === 'str' && !State.battle.strFlowTriggered && State.battle.combo < 3 && State.battle.combo + hits >= 3;
-            return `${card.hits ? `${hitAmounts.join('+')} → ` : ''}予測 ${total} DMG${hpCost ? ` / HP-${hpCost}` : ''}${flowReady ? ' / 連撃の呼吸' : ''}`;
+            const readBonus = card.extra === 'sword_saint_read' ? (State.battle.enemy.intent === 'atk' ? ' / 必ず回避' : ' / 1枚ドロー・続けて行動') : '';
+            return `${card.hits ? `${hitAmounts.join('+')} → ` : ''}予測 ${total} DMG${hpCost ? ` / HP-${hpCost}` : ''}${flowReady ? ' / 連撃の呼吸' : ''}${readBonus}`;
         }
         if (card.type === 'mag') {
             let amount = Math.floor(int * card.val) + State.battle.magBonus;
@@ -1590,6 +1647,7 @@ const Game = {
         if (card.type === 'phys') {
             if (card.extra === 'hp_scale') main = `攻撃${pct(card.val)}%＋現在HP10%ダメージ`;
             else if (card.extra === 'hp_sacrifice') main = `現在HPを${pct(card.scale || .15)}%消費し、その${card.extraMult || 2.6}倍のダメージ（HP1で止まる）`;
+            else if (card.extra === 'block_hp_sacrifice') main = `全ブロックを消費。現在HPを${pct(card.scale||.15)}%消費し、ブロックの${card.blockMult||1.5}倍＋消費HPの${card.extraMult||2.5}倍ダメージ（HP1で止まる）`;
             else if (card.extra === 'hp_sacrifice_blast') main = `現在HPを${pct(card.scale || .22)}%消費し、その${card.extraMult || 3.4}倍のダメージ（HP1で止まる）`;
             else if (card.extra === 'block_dmg') main = `全ブロックを消費し、その${card.extraMult || 1}倍のダメージ`;
             else if (card.extra === 'maxhp_scale') main = `最大HPの${pct(card.scale || .3)}%ダメージ${card.hpCostScale ? `。現在HPを${pct(card.hpCostScale)}%消費（HP1で止まる）` : ''}`;
@@ -1600,6 +1658,7 @@ const Game = {
             if (card.extra === 'execute') main += '。敵HP30%以下なら威力2倍';
             if (card.extra === 'missing_hp_damage') main += `。失ったHPの${pct(card.scale || .25)}%を追加`;
             if (card.extra === 'intent_counter') main += '。敵が強攻撃・吸収なら威力2倍＋予告値ブロック';
+            if (card.extra === 'sword_saint_read') main += '。敵が通常攻撃なら必ず回避して威力3倍。それ以外なら1枚引き、続けて行動';
             if (card.extra === 'drain') main += `。与ダメージの${pct(card.drainRate || .5)}%回復`;
             if (card.self_dmg) main += `。自分も${card.self_dmg}ダメージ（反動ではHP1未満にならない）`;
         } else if (card.type === 'mag') {
@@ -1637,6 +1696,7 @@ const Game = {
                 breakthrough:'次に与えるダメージを1.5倍にする',
                 block_conversion:'全ブロックを消費し、5ごとに攻撃・魔力+1',
                 chain_art:'各ターン最初の物理攻撃を60%で追撃',
+                combo_retain:`現在コンボを最大${card.upgraded?7:5}まで記憶し、次ターンの開始コンボにする`,
                 mana_reactor:'ターン開始時に一時魔力+1',
                 blood_pact:'HP消費によるブロック変換率を100%にする',
                 healing_strike:'回復カードの実回復量と同じダメージを与える',
@@ -1676,6 +1736,7 @@ const Game = {
         if (card.burn) changes.push(`炎上 ${card.burn}→${Math.ceil(card.burn*1.5)}`);
         if (card.thorns) changes.push(`反撃 ${card.thorns}→${Math.ceil(card.thorns*1.5)}`);
         if (card.extra === 'hp_sacrifice') changes.push('消費15%→12% / 威力2.6→3.4倍');
+        if (card.extra === 'block_hp_sacrifice') changes.push('ブロック倍率1.5→2倍 / HP倍率2.5→3.2倍');
         if (card.extra === 'hp_sacrifice_blast') changes.push('消費22%→18% / 威力3.4→4.2倍');
         if (card.extra === 'hp_sacrifice_block') changes.push('消費12%→10% / ブロック2.5→3.2倍');
         if (card.extra === 'missing_hp_damage') changes.push('失ったHP倍率 25%→35%');
@@ -1687,6 +1748,7 @@ const Game = {
         if (card.extra === 'maxhp_block') changes.push(card.id==='immortal_rampart'?'65%/上限75→80%/上限90':'50%/上限60→65%/上限75');
         if (card.extra === 'combo_cashout') changes.push('コンボ倍率 35%→50%');
         if (card.effect === 'mana_echo') changes.push('複製予約 1回→2回');
+        if (card.effect === 'combo_retain') changes.push('持ち越し上限 5→7コンボ');
         if (card.extra === 'vitality_wave') changes.push('最大HP22%→30% / 失ったHP25%→35%');
         if (card.extra === 'intent_block') changes.push('変換上限 30→45');
         if (card.extra === 'revenge_guard') changes.push('反射 1→1.5倍');
