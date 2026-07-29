@@ -130,26 +130,67 @@ export const CARDS_DB = [
     { id: 'apex_str', name: '極・闘神化', type: 'skill', attr: 'str', effect: 'apex_str', draw: 3, add_action: true, exhaust: true, rarity: 'rare', pool: 'str', limit: 1, unlockLevel: 10, desc: 'この戦闘中、攻撃+5、コンボ開始値2、各ターン最初の物理攻撃が80%で追撃。3枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon: 'fa-crown' },
     { id: 'apex_int', name: '極・魔導核', type: 'skill', attr: 'int', effect: 'apex_int', manaGain: 5, draw: 2, add_action: true, exhaust: true, rarity: 'rare', pool: 'int', limit: 1, unlockLevel: 10, desc: 'この戦闘中、一時魔力獲得+2、ターン開始時一時魔力+2（魔力炉と加算重複）。一時魔力+5、2枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon: 'fa-circle-nodes' },
     { id: 'apex_hp', name: '極・生命天輪', type: 'skill', attr: 'hp', effect: 'apex_hp', draw: 2, add_action: true, exhaust: true, rarity: 'rare', pool: 'hp', limit: 1, unlockLevel: 10, desc: '最大HP30%回復。この戦闘中、HP消費を125%ブロック化し、消費HP75%をターン終了時に回復。2枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon: 'fa-dharmachakra' },
+
+    // --- PLAYER Lv11-20：構築を横へ広げる上級カード ---
+    { id:'formation_break', name:'破陣の一手', type:'phys', attr:'str', val:1.4, extra:'shatter_block', unlockLevel:11, desc:'攻撃140%。攻撃前に敵の全ブロックを破壊し、破壊5ごとにコンボ+1。', icon:'fa-route' },
+    { id:'kindling_alchemy', name:'火種錬成', type:'mag', attr:'int', val:.9, burn:4, extra:'burn_study', unlockLevel:11, desc:'魔力90%ダメージ、炎上4。すでに炎上中なら1枚引く。', icon:'fa-fire-burner' },
+    { id:'surplus_pulse', name:'余剰脈動', type:'heal', attr:'hp', val:0, healRate:.15, extra:'overheal_block', unlockLevel:11, desc:'最大HP15%回復。最大HPを超えた回復量の2倍をブロックにする。', icon:'fa-droplet' },
+
+    { id:'rhythm_shift', name:'拍子替え', type:'skill', attr:'str', effect:'combo_exchange', add_action:true, unlockLevel:12, desc:'コンボを最大3消費し、同じ枚数引く。続けて行動。', icon:'fa-arrows-to-circle' },
+    { id:'mana_inversion', name:'魔力反転', type:'def', attr:'int', val:.8, manaCost:1, consumeAllMana:true, extra:'mana_to_block', unlockLevel:12, desc:'一時魔力を全消費。魔力80%＋消費1ごとに4ブロック。', icon:'fa-right-left' },
+    { id:'pain_cutoff', name:'痛覚遮断', type:'skill', attr:'hp', effect:'pain_refund', add_action:true, exhaust:true, limit:1, unlockLevel:12, desc:'次にカードで消費するHPの60%を即座に回復。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-user-injured' },
+
+    { id:'cross_afterimage', name:'十字残影', type:'phys', attr:'str', val:.65, hits:2, extra:'combo_hit_bonus', unlockLevel:13, desc:'攻撃65%の2連撃。使用前コンボ4以上なら4連撃になる。', icon:'fa-scissors' },
+    { id:'frostfire', name:'氷炎術', type:'mag', attr:'int', val:1.7, burn:5, freeze:true, extra:'frozen_mana', unlockLevel:13, desc:'魔力170%ダメージ、炎上5と氷結。すでに氷結中なら一時魔力+3。', icon:'fa-temperature-arrow-down' },
+    { id:'bloodletting_tactics', name:'瀉血戦術', type:'skill', attr:'hp', effect:'blood_draw', add_action:true, unlockLevel:13, desc:'現在HP18%を消費し、3枚引く。続けて行動（HP1で止まる）。', icon:'fa-hand-holding-heart' },
+
+    { id:'pressure_cycle', name:'圧力循環', type:'skill', attr:'str', effect:'combo_guard', add_action:true, exhaust:true, limit:1, unlockLevel:14, desc:'この戦闘中、物理カード使用後に現在コンボと同じブロック（最大12）。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-gauge-high' },
+    { id:'forbidden_recall', name:'禁書回収', type:'skill', attr:'int', effect:'reclaim_spell', add_action:true, exhaust:true, limit:1, unlockLevel:14, desc:'除外札から魔力型カードを1枚手札へ戻す。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-scroll' },
+    { id:'pulse_acceleration', name:'鼓動加速', type:'skill', attr:'hp', effect:'hp_flow', add_action:true, exhaust:true, limit:1, unlockLevel:14, desc:'この戦闘中、各ターン最初にHPを消費したとき1枚引く。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-heart-crack' },
+
+    { id:'hunting_instinct', name:'狩猟本能', type:'phys', attr:'str', val:2.4, extra:'wounded_flow', exhaust:true, rarity:'rare', pool:'str', limit:1, unlockLevel:15, desc:'攻撃240%。攻撃前に敵HPが半分以下なら2枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-bullseye' },
+    { id:'flame_return', name:'焔還術', type:'skill', attr:'int', effect:'burn_convert', draw:2, add_action:true, exhaust:true, rarity:'rare', pool:'int', limit:1, unlockLevel:15, desc:'敵の炎上を全消費し、2ごとに一時魔力+1。2枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-fire-extinguisher' },
+    { id:'pain_dividend', name:'苦痛配当', type:'skill', attr:'hp', effect:'pain_dividend', add_action:true, exhaust:true, rarity:'rare', pool:'hp', limit:1, unlockLevel:15, desc:'次に受けるHPダメージと同じブロックを得て2枚引く。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-scale-unbalanced' },
+
+    { id:'double_step', name:'二重歩法', type:'skill', attr:'str', effect:'phys_echo', add_action:true, exhaust:true, limit:1, unlockLevel:16, desc:'次の物理攻撃を60%の威力でもう一度与える。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-images' },
+    { id:'reserved_cast', name:'予約詠唱', type:'skill', attr:'int', effect:'echo', echoGain:2, manaCost:5, add_action:true, exhaust:true, limit:1, unlockLevel:16, desc:'一時魔力5消費。次の魔法の発動回数+2。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-stopwatch' },
+    { id:'blood_shield_cycle', name:'血盾転換', type:'heal', attr:'hp', val:0, healRate:.1, extra:'block_to_heal', add_action:true, unlockLevel:16, desc:'全ブロックを消費し、最大HP10%＋消費ブロック分を回復。続けて行動。', icon:'fa-arrows-spin' },
+
+    { id:'chain_armor', name:'連鎖装甲', type:'def', attr:'str', val:6, extra:'combo_block', unlockLevel:17, desc:'ブロック6＋現在コンボ1ごとに3ブロック。コンボは消費しない。', icon:'fa-shield-halved' },
+    { id:'mana_armor', name:'魔素装甲', type:'skill', attr:'int', effect:'mana_armor', add_action:true, exhaust:true, limit:1, unlockLevel:17, desc:'この戦闘中、被ダメージ時に一時魔力1につき3ダメージを肩代わり。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-shield-dog' },
+    { id:'redline_break', name:'赤線突破', type:'phys', attr:'hp', val:0, extra:'redline_blast', unlockLevel:17, desc:'現在HP25%を消費し、その3倍＋失ったHP30%ダメージ（HP1で止まる）。', icon:'fa-house-medical-flag' },
+
+    { id:'endless_stair', name:'無尽階段', type:'skill', attr:'str', effect:'combo_thresholds', add_action:true, exhaust:true, rarity:'rare', pool:'str', limit:1, unlockLevel:18, desc:'この戦闘中、コンボが5の倍数へ初到達するたび行動権+1・1枚ドロー。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-stairs' },
+    { id:'flame_spirit_cycle', name:'火霊輪廻', type:'skill', attr:'int', effect:'ignition_echo', add_action:true, exhaust:true, rarity:'rare', pool:'int', limit:1, unlockLevel:18, desc:'この戦闘中、引火・再引火するたび残響+1。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-shuffle' },
+    { id:'blood_interest', name:'血の利息', type:'skill', attr:'hp', effect:'hp_interest', add_action:true, exhaust:true, rarity:'rare', pool:'hp', limit:1, unlockLevel:18, desc:'この戦闘中、ターン終了時に消費HP10ごとに攻撃・魔力+1。続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-heart-circle-bolt' },
+
+    { id:'perfect_chain', name:'完全連携', type:'phys', attr:'str', val:.65, hits:6, extra:'combo_flow', unlockLevel:19, desc:'攻撃65%の6連撃。使用前コンボ6以上なら2枚引き、続けて行動。', icon:'fa-tornado' },
+    { id:'singularity_formula', name:'特異点式', type:'mag', attr:'int', val:1.2, extra:'hand_burst', exhaust:true, limit:1, unlockLevel:19, desc:'手札をすべて捨て、魔力120%＋捨てた1枚ごとに魔力80%ダメージ。[1回のみ/デッキ1枚まで]', icon:'fa-globe' },
+    { id:'last_bastion', name:'最後の砦', type:'def', attr:'hp', val:8, extra:'missing_hp_block_high', thorns:4, unlockLevel:19, desc:'ブロック8＋失ったHP60%。反撃4。', icon:'fa-building-shield' },
+
+    { id:'godspeed_domain', name:'神速領域', type:'skill', attr:'str', effect:'apex_str2', draw:2, add_action:true, exhaust:true, rarity:'rare', pool:'str', limit:1, unlockLevel:20, desc:'この戦闘中、すべての物理攻撃が40%で追撃。2枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-infinity' },
+    { id:'akashic_grimoire', name:'万象魔典', type:'skill', attr:'int', effect:'apex_int2', manaGain:5, draw:2, add_action:true, exhaust:true, rarity:'rare', pool:'int', limit:1, unlockLevel:20, desc:'この戦闘中、魔法カードを3枚使うたび行動権+1・1枚ドロー。一時魔力+5、2枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-hat-wizard' },
+    { id:'phoenix_heart', name:'不死鳥心臓', type:'skill', attr:'hp', effect:'apex_hp2', draw:2, add_action:true, exhaust:true, rarity:'rare', pool:'hp', limit:1, unlockLevel:20, desc:'この戦闘で一度だけ、致死ダメージ時に最大HP40%で復活し同量のブロック。2枚引き、続けて行動。[1回のみ/デッキ1枚まで]', icon:'fa-phoenix-framework' },
 ];
 
 // Every card is deliberately assigned a secret modification that complements
 // its role. Keeping this table explicit prevents generic upgrades from creating
 // accidental infinite loops (notably draw + action cards such as quick_think).
 const SECRET_MOD_GROUPS = {
-    rupture: ['punch','kick','tackle','life_burn','draw_slash','finisher','guard_break','quick','feint','life_share','body_press','dragon_fist','blood_sucker','masters_read','read_blade','combo_breaker','vitality_wave'],
-    combo_mastery: ['multi','flurry','infinite_blades','tiger_rush','opening_flurry','thousand_fangs'],
+    rupture: ['punch','kick','tackle','life_burn','draw_slash','finisher','guard_break','quick','feint','life_share','body_press','dragon_fist','blood_sucker','masters_read','read_blade','combo_breaker','vitality_wave','formation_break','hunting_instinct','redline_break'],
+    combo_mastery: ['multi','flurry','infinite_blades','tiger_rush','opening_flurry','thousand_fangs','cross_afterimage','perfect_chain'],
     rebirth: ['heavy','grand_slam','castle_gate'],
-    anchor: ['defend','counter','endure','fortify','iron_will','revenge_fortress','life_guard','prism_guard','pain_return','immortal_rampart'],
+    anchor: ['defend','counter','endure','fortify','iron_will','revenge_fortress','life_guard','prism_guard','pain_return','immortal_rampart','mana_inversion','chain_armor','last_bastion'],
     thornward: ['spikes','aegis','shield_bash','regenerative_armor'],
-    overflow: ['bandage','rest','second_wind'],
-    renewal: ['super_heal','vitality','first_aid','lifeline_cannon','apex_hp'],
-    serenity: ['quick_think','cheer','focus','rage','muscle','god_strength','titan_body','berserker','immortal','limit_break','world_tree','step_in','tailwind','parry','last_stand_slash','blood_shield','war_cry','apex_str'],
+    overflow: ['bandage','rest','second_wind','surplus_pulse'],
+    renewal: ['super_heal','vitality','first_aid','lifeline_cannon','apex_hp','blood_shield_cycle'],
+    serenity: ['quick_think','cheer','focus','rage','muscle','god_strength','titan_body','berserker','immortal','limit_break','world_tree','step_in','tailwind','parry','last_stand_slash','blood_shield','war_cry','apex_str','rhythm_shift','pain_cutoff','bloodletting_tactics','pressure_cycle','pulse_acceleration','pain_dividend','double_step','mana_armor','endless_stair','blood_interest','godspeed_domain','phoenix_heart'],
     insight: ['meditate'],
-    tempo: ['prepare','recycle','time_slice'],
+    tempo: ['prepare','recycle','time_slice','forbidden_recall','flame_return'],
     sacrifice_circuit: ['spark','thunder','barrier','arcane_shield'],
-    void_distill: ['fireball','overload','meteor','black_hole','astral_collapse','supernova'],
-    anomaly_formula: ['mana_charge','frost','scorch','absolute_zero','mana_drop','mana_ward','quick_cast','ley_resonance','apex_int'],
-    paradox_refund: ['grimoire','mana_burst','time_warp','echo_spell','causal_reverse'],
+    void_distill: ['fireball','overload','meteor','black_hole','astral_collapse','supernova','kindling_alchemy','singularity_formula'],
+    anomaly_formula: ['mana_charge','frost','scorch','absolute_zero','mana_drop','mana_ward','quick_cast','ley_resonance','apex_int','frostfire','flame_spirit_cycle'],
+    paradox_refund: ['grimoire','mana_burst','time_warp','echo_spell','causal_reverse','reserved_cast','akashic_grimoire'],
     future_clone: ['future_sight']
 };
 

@@ -46,10 +46,10 @@ if (vitalityCards.grand_slam.extra !== 'hp_halve_press' || vitalityCards.grand_s
 if (CARDS_DB.length < 60) fail(`Expected a broad card pool, found ${CARDS_DB.length}`);
 if (CARDS_DB.some(card => card.id === 'fate_shuffle' || card.effect === 'limit_flow') || CARDS_DB.some(card => card.name === '限界解放')) fail('Limit Release must be completely removed from the card pool');
 const unlockCards = CARDS_DB.filter(card => card.unlockLevel);
-if (unlockCards.length !== 27) fail(`Expected exactly 27 level-unlock cards, found ${unlockCards.length}`);
+if (unlockCards.length !== 57) fail(`Expected exactly 57 level-unlock cards, found ${unlockCards.length}`);
 if (!unlockCards.some(card => card.rarity === 'rare') || !unlockCards.some(card => card.rarity !== 'rare')) fail('Level progression must unlock both normal and rare cards');
-if (Math.min(...unlockCards.map(card => card.unlockLevel)) !== 2 || Math.max(...unlockCards.map(card => card.unlockLevel)) !== 10) fail('Card unlocks must span every player level from 2 through 10');
-for (let level=2; level<=10; level++) {
+if (Math.min(...unlockCards.map(card => card.unlockLevel)) !== 2 || Math.max(...unlockCards.map(card => card.unlockLevel)) !== 20) fail('Card unlocks must span every player level from 2 through 20');
+for (let level=2; level<=20; level++) {
     const rewards = unlockCards.filter(card => card.unlockLevel === level);
     if (rewards.length !== 3 || !['str','int','hp'].every(attr => rewards.filter(card => card.attr===attr).length===1)) fail(`Level ${level} must unlock exactly one card for each plan`);
 }
@@ -86,6 +86,15 @@ for (const effect of ['tiger_form','mana_forge','second_heart','chain_art','mana
 }
 for (const extra of ['combo_cashout','vitality_wave']) {
     if (!unlockCards.some(card => card.extra === extra) || !script.includes(`card.extra === '${extra}'`)) fail(`Missing level reward scaling mechanic: ${extra}`);
+}
+for (const level of [15,18,20]) {
+    if (unlockCards.filter(card => card.unlockLevel === level && card.rarity === 'rare').length !== 3) fail(`Level ${level} must provide one build-defining rare card to every plan`);
+}
+for (const level of [11,12,13,14,16,17,19]) {
+    if (unlockCards.filter(card => card.unlockLevel === level && card.rarity === 'rare').length) fail(`Level ${level} rewards must remain normal cards`);
+}
+for (const mechanic of ['combo_exchange','pain_refund','reclaim_spell','burn_convert','pain_dividend','phys_echo','mana_armor','combo_thresholds','ignition_echo','hp_interest','apex_str2','apex_int2','apex_hp2']) {
+    if (!unlockCards.some(card => card.effect === mechanic) || !script.includes(`card.effect === '${mechanic}'`)) fail(`Level 11-20 mechanic is missing: ${mechanic}`);
 }
 if (!unlockCards.some(card => card.effect === 'mana_echo') || !script.includes("card.effect === 'mana_echo'")) fail('Dragon Vein Resonance must use its new temporary-mana echo mechanic');
 if (readme && !readme.includes('| 10 | 極・闘神化 | 極・魔導核 | 極・生命天輪 |')) fail('README must document the complete level 2-10 reward schedule');
@@ -138,7 +147,7 @@ if (!script.includes('playerXp') || !script.includes('levelFromXp') || !script.i
 if (!script.includes("DEBUG_ALL_CARDS || !card.unlockLevel") || !server.includes("--debug-all-cards") || !pkg.scripts?.debug?.includes("--debug-all-cards")) fail('All-card debug mode must unlock cards without overwriting normal progression');
 if (!script.includes("UI.toast('【特性】連撃の呼吸！ 行動権+1・1枚ドロー')") || !script.includes('State.battle.combo >= 3')) fail('Attack archetype must trigger its once-per-turn combo flow at three hits');
 if (!script.includes('1 + vulnerableStacks * .5') || !script.includes('State.battle.enemyVulnerable = 0')) fail('Vulnerability must stack without a cap and be consumed all at once by the next attack');
-if (!script.includes('State.battle.echo = (Number(State.battle.echo) || 0) + 1') || !script.includes('echoIndex<echoStacks')) fail('Echo must stack and repeat the next spell once per stack');
+if (!script.includes('State.battle.echo = (Number(State.battle.echo) || 0) + (card.echoGain || 1)') || !script.includes('echoIndex<echoStacks')) fail('Echo must stack and repeat the next spell once per stack');
 if ((script.match(/State\.battle\.manaForge \+= forgeGain/g) || []).length < 2) fail('Mana Forge and Apex Magic Core must add their mana-gain bonuses instead of overwriting each other');
 if (!script.includes("reignition ? '再引火' : '引火爆発'") || !script.includes("reignition ? .2 : .3") || !script.includes('State.tempMana += 10')) fail('Burn reapplication must trigger ignition for 30% max HP and grant 10 temporary mana');
 if (!script.includes('enemyIgnited') || !script.includes('Math.ceil(manaBefore*1.5)') || !script.includes("'MAX HP 20% / MANA ×1.5'")) fail('Further burn reapplications must reignite for 20% max HP and multiply current temporary mana by 1.5');
@@ -147,6 +156,7 @@ if (!script.includes('ignitionExplosion:') || !script.includes('UI.ignitionExplo
 if (!script.includes("const particleCount = lightweight ? (reignition ? 10 : 8) : (reignition ? 16 : 14)") || !html.includes('@media (max-width:767px),(pointer:coarse)')) fail('Ignition effects must use the lightweight mobile particle profile');
 if (!script.includes('State.battle.pendingFx = Math.max(State.battle.pendingFx || 0, 400)')) fail('Lethal ignition must delay victory long enough to show its cut-in and explosion');
 if (!script.includes("heading:'炎上コンボ'") || !html.includes('.notice-body h3')) fail('Balance announcements must use readable headings and structured body text');
+if (!html.includes('.notice-item{flex:none;') || !html.includes('id="announcements-list" class="flex-1 min-h-0 overflow-y-auto overscroll-contain')) fail('Expanded announcements must not shrink or clip inside the scrollable modal');
 if (!script.includes("anchor: { name:'重装化'") || !script.includes("card.secretMod === 'anchor') blk = Math.ceil(blk * 1.5)") || (readme && readme.includes('不動結界'))) fail('Obsolete block retention secret must be replaced by the 50% Heavy Armor bonus');
 if (!script.includes('let breakthroughMultiplier = State.battle.breakthrough || 1') || !script.includes('castIndex === 0 && State.battle.breakthrough')) fail('Physical and magical damage previews must include Breakthrough');
 if (readme && (!readme.includes('攻撃型の設計') || !readme.includes('1ターンに1回だけ発動'))) fail('Attack archetype design and trait limit must be documented');

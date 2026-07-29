@@ -89,6 +89,17 @@ const SECRET_MOD_COST = 100;
 // 公開コミットでは、プレイヤー向けの変更をこの一覧の先頭へ追加する。
 const ANNOUNCEMENTS = [
     {
+        id:'player-level-20-rewards',
+        date:'2026.07.29',
+        title:'プレイヤーレベル20報酬を追加',
+        intro:'Lv11〜20で、各プランに10枚ずつ、合計30枚の上級カードが解放されます。',
+        sections:[
+            { heading:'攻撃型', items:['コンボをドロー・防御・追撃へ変換する新ルートを追加','Lv20「神速領域」で、すべての物理攻撃に追撃を付与']},
+            { heading:'魔力型', items:['炎上変換、除外札回収、魔力によるダメージ肩代わりを追加','Lv20「万象魔典」で、3回ごとの連続詠唱を構築可能']},
+            { heading:'体力型', items:['過剰回復、HP消費時ドロー、ブロック再利用を追加','Lv20「不死鳥心臓」で、一度だけ復活して態勢を立て直せる']}
+        ]
+    },
+    {
         id:'magic-plan-rework',
         date:'2026.07.28',
         title:'魔力型バランス調整のお知らせ',
@@ -173,7 +184,11 @@ const State = {
         retainBlock: false, echo: 0, immortal: false, enemyWeak: false,
         combo: 0, cardsPlayed: 0, damageThisTurn: 0, lastCardType: null, spellChain: 0,
         enemyVulnerable: 0, enemyBurn: 0, enemyIgnited: false, enemyFrozen: false, thorns: 0, playerFrail: false,
-        counterMagic: false, reflectNext: false, manaAbsorb: false, pendingManaRefund: 0, secretClonedUids: [], arcaneArtsUsed: [], pendingFx: 0, lastDrawnUids: [], magicCirculatedUids: [], strFlowTriggered: false, tigerForm:false, manaForge:0, manaReactor:false, manaEcho:0, secondHeart:false, bloodPact:false, healingStrike:false, chainArt:false, chainUsedThisTurn:false, breakthrough:false, hpSpentThisTurn:0, currentBattleRecorded:false
+        counterMagic:false, reflectNext:false, manaAbsorb:false, pendingManaRefund:0, secretClonedUids:[], arcaneArtsUsed:[], pendingFx:0, lastDrawnUids:[], magicCirculatedUids:[], strFlowTriggered:false,
+        tigerForm:false, manaForge:0, manaReactor:false, manaEcho:0, secondHeart:false, bloodPact:false, healingStrike:false, chainArt:false, chainUsedThisTurn:false, breakthrough:false,
+        comboGuard:false, painRefund:0, hpFlow:false, hpFlowTriggered:false, painDividend:false, physEcho:0, manaArmor:false, comboThresholds:false, comboStepsClaimed:[],
+        ignitionEcho:false, hpInterest:false, apexPhysEcho:0, spellCadence:false, spellCadenceCount:0, phoenixHeart:false,
+        hpSpentThisTurn:0, currentBattleRecorded:false
     }
 };
 
@@ -665,6 +680,11 @@ const Game = {
         State.battle.tigerForm = false; State.battle.manaForge = 0; State.battle.manaReactor = false; State.battle.manaEcho = 0;
         State.battle.secondHeart = false; State.battle.bloodPact = false; State.battle.healingStrike = false;
         State.battle.chainArt = false; State.battle.chainUsedThisTurn = false; State.battle.breakthrough = false;
+        State.battle.comboGuard = false; State.battle.painRefund = 0; State.battle.hpFlow = false; State.battle.hpFlowTriggered = false;
+        State.battle.painDividend = false; State.battle.physEcho = 0; State.battle.manaArmor = false;
+        State.battle.comboThresholds = false; State.battle.comboStepsClaimed = []; State.battle.ignitionEcho = false;
+        State.battle.hpInterest = false; State.battle.apexPhysEcho = 0; State.battle.spellCadence = false; State.battle.spellCadenceCount = 0;
+        State.battle.phoenixHeart = false;
         State.battle.hpSpentThisTurn = 0;
         State.battle.processing = false;
         Game.rollEnemyIntent();
@@ -689,6 +709,7 @@ const Game = {
         State.battle.spellChain = 0;
         State.battle.strFlowTriggered = false;
         State.battle.chainUsedThisTurn = false;
+        State.battle.hpFlowTriggered = false;
         State.battle.hpSpentThisTurn = 0;
         if (State.battle.manaReactor) { State.tempMana += State.battle.manaReactor; UI.traitActivation('magic','魔力永久機関',`MANA +${State.battle.manaReactor}`); }
         if (State.battle.pendingManaRefund > 0) {
@@ -780,6 +801,17 @@ const Game = {
         State.hp -= cost;
         if (cost > 0) {
             State.battle.hpSpentThisTurn += cost;
+            if (State.battle.painRefund > 0) {
+                const refund = Math.min(State.maxHp-State.hp,Math.ceil(cost*State.battle.painRefund));
+                State.hp += refund;
+                State.battle.painRefund = 0;
+                if (refund > 0) { UI.combatNumber(refund,'heal','player-battle-avatar'); UI.toast(`痛覚遮断：HP ${refund}回復`); }
+            }
+            if (State.battle.hpFlow && !State.battle.hpFlowTriggered) {
+                State.battle.hpFlowTriggered = true;
+                Game.drawCards(1);
+                UI.toast('鼓動加速：1枚ドロー');
+            }
             if (State.playerType === 'hp') {
                 const armor = Math.max(1, Math.floor(cost * (State.battle.bloodPact || .5)));
                 State.battle.block += armor;
@@ -886,9 +918,34 @@ const Game = {
         let int = State.int + State.battle.playerTempInt;
         const isDamageCard = card.type === 'phys' || card.type === 'mag';
         const comboBefore = State.battle.combo;
+        const enemyWasBurning = State.battle.enemyBurn > 0;
+        const enemyWasFrozen = State.battle.enemyFrozen;
+        const enemyWasWounded = State.battle.enemy.hp <= State.battle.enemy.maxHp*.5;
         if (isDamageCard) {
             State.battle.cardsPlayed++;
             State.battle.lastCardType = card.type;
+        }
+
+        if (card.extra === 'shatter_block' && State.battle.enemy.block > 0) {
+            const shattered = State.battle.enemy.block;
+            State.battle.enemy.block = 0;
+            State.battle.combo += Math.floor(shattered/5);
+            UI.toast(`破陣：ブロック${shattered}破壊・コンボ+${Math.floor(shattered/5)}`);
+        }
+        if (card.extra === 'burn_study' && enemyWasBurning) Game.drawCards(1);
+        if (card.extra === 'frozen_mana' && enemyWasFrozen) {
+            State.tempMana += 3;
+            UI.toast('氷炎術：一時魔力+3');
+        }
+        if (card.extra === 'wounded_flow' && enemyWasWounded) {
+            Game.drawCards(2);
+            State.battle.actionsLeft++;
+            UI.toast('狩猟本能：2枚ドロー・続けて行動');
+        }
+        if (card.extra === 'combo_flow' && comboBefore >= 6) {
+            Game.drawCards(2);
+            State.battle.actionsLeft++;
+            UI.toast('完全連携：2枚ドロー・続けて行動');
         }
 
         // 炎上系の付与・爆発はカード本体の攻撃より先に解決する。
@@ -922,12 +979,17 @@ const Game = {
                 const cost = Game.spendHp(State.hp * (card.scale || .5));
                 dmg = Math.floor(cost * (card.extraMult || 3));
             }
+            if (card.extra === 'redline_blast') {
+                const cost = Game.spendHp(State.hp*.25);
+                dmg = Math.floor(cost*3 + (State.maxHp-State.hp)*.3);
+            }
             if (card.self_dmg) {
                 Game.applyRecoilDamage(card.self_dmg);
             }
             let totalDealt = 0;
-            if (card.hits) {
-                for(let k=0; k<card.hits; k++) {
+            const resolvedHits = card.extra === 'combo_hit_bonus' && comboBefore >= 4 ? 4 : (card.hits || 1);
+            if (resolvedHits > 1) {
+                for(let k=0; k<resolvedHits; k++) {
                     const hitDmg = Math.floor(dmg * (1 + Math.min(5,comboBefore + k) * .1));
                     totalDealt += Game.dealDamage(hitDmg, { kind:'phys', delay:k * MULTI_HIT_INTERVAL, multiHit:true, critical: (card.rarity === 'rare' && k === card.hits-1) || hitDmg >= State.battle.enemy.maxHp * .25 });
                 }
@@ -940,8 +1002,32 @@ const Game = {
                 Game.dealDamage(Math.floor(dmg * State.battle.chainArt), { kind:'phys', delay:120, critical:true });
                 UI.toast('【連鎖奥義】追撃！');
             }
-            State.battle.combo = comboBefore + (card.hits || 1);
+            if (State.battle.physEcho > 0 && State.battle.enemy.hp > 0) {
+                const echoRate = State.battle.physEcho;
+                State.battle.physEcho = 0;
+                Game.dealDamage(Math.floor(dmg*resolvedHits*echoRate),{kind:'phys',delay:140,critical:true});
+                UI.toast(`二重歩法：${Math.round(echoRate*100)}%追撃`);
+            }
+            if (State.battle.apexPhysEcho > 0 && State.battle.enemy.hp > 0) {
+                Game.dealDamage(Math.floor(dmg*resolvedHits*State.battle.apexPhysEcho),{kind:'phys',delay:180,critical:true});
+                UI.toast('神速領域：追撃');
+            }
+            State.battle.combo += resolvedHits;
             if (card.extra === 'combo_cashout') { State.battle.combo = 0; UI.toast(`コンボ${comboBefore}を解放！`); }
+            if (State.battle.comboGuard) {
+                const guard = Math.min(12,State.battle.combo);
+                State.battle.block += guard;
+                UI.combatNumber(guard,'block','player-battle-avatar');
+            }
+            if (State.battle.comboThresholds) {
+                const reachedStep = Math.floor(State.battle.combo/5)*5;
+                if (reachedStep >= 5 && !State.battle.comboStepsClaimed.includes(reachedStep)) {
+                    State.battle.comboStepsClaimed.push(reachedStep);
+                    State.battle.actionsLeft++;
+                    Game.drawCards(1);
+                    UI.traitActivation('attack','無尽階段',`COMBO ${reachedStep} / ACTION +1`);
+                }
+            }
             if (card.extra === 'drain') {
                 const drainAmt = Math.min(State.maxHp - State.hp, Math.floor(totalDealt * (card.drainRate || 0.5)));
                 State.hp += drainAmt;
@@ -953,6 +1039,12 @@ const Game = {
         } else if (card.type === 'mag') {
             const storedBonus = State.battle.magBonus;
             let dmg = Math.floor(int * card.val) + storedBonus;
+            if (card.extra === 'hand_burst') {
+                const sacrificed = State.battle.hand.length;
+                State.battle.discardPile.push(...State.battle.hand.splice(0));
+                dmg += Math.floor(int*.8*sacrificed);
+                UI.toast(`特異点式：手札${sacrificed}枚を威力へ変換`);
+            }
             if (card.extra === 'temp_mana_burst') dmg += manaSpent * 4;
             if (card.extra === 'temp_mana_flat_burst') dmg += manaSpent * (card.manaFlat || 8);
             State.battle.magBonus = 0;
@@ -974,9 +1066,18 @@ const Game = {
         } else if (card.type === 'heal') {
             let heal = Game.getCardHeal(card);
             if (card.extra === 'low_hp_double' && State.hp <= State.maxHp / 2) heal *= 2;
+            if (card.extra === 'block_to_heal') {
+                heal += State.battle.block;
+                State.battle.block = 0;
+            }
             const missingHp = State.maxHp - State.hp;
             const actualHeal = Math.min(State.maxHp - State.hp, heal);
             State.hp += actualHeal;
+            if (card.extra === 'overheal_block') {
+                const surplusBlock = Math.max(0,heal-missingHp)*2;
+                State.battle.block += surplusBlock;
+                if (surplusBlock > 0) UI.combatNumber(surplusBlock,'block','player-battle-avatar');
+            }
             if (card.secretMod === 'overflow') {
                 const overflow = Math.max(0, heal - missingHp);
                 if (overflow > 0) { State.battle.block += overflow; UI.combatNumber(overflow,'block','player-battle-avatar'); }
@@ -996,6 +1097,9 @@ const Game = {
             if (card.extra === 'maxhp_block') blk = Math.min(card.upgraded ? (card.upgradedBlockCap||75) : (card.blockCap||60), Math.floor(State.maxHp * (card.scale || .5)));
             if (card.extra === 'intent_block') blk = Game.incomingDamage();
             if (card.extra === 'revenge_guard') blk = Game.incomingDamage() + Math.floor((State.maxHp - State.hp) * .2);
+            if (card.extra === 'mana_to_block') blk = Math.floor(int*card.val) + manaSpent*4;
+            if (card.extra === 'combo_block') blk += State.battle.combo*3;
+            if (card.extra === 'missing_hp_block_high') blk += Math.floor((State.maxHp-State.hp)*.6);
             if (State.battle.playerFrail) blk = Math.max(1, Math.floor(blk * .75));
             if (card.secretMod === 'anchor') blk = Math.ceil(blk * 1.5);
             State.battle.block += blk;
@@ -1076,6 +1180,66 @@ const Game = {
                 const actualHeal = Math.min(State.maxHp-State.hp,heal); State.hp += actualHeal;
                 UI.combatNumber(actualHeal,'heal','player-battle-avatar');
                 UI.traitActivation('vitality','極・生命天輪',`HEAL ${actualHeal} / CYCLE ON`);
+            } else if (card.effect === 'combo_exchange') {
+                const exchanged = Math.min(3,State.battle.combo);
+                State.battle.combo -= exchanged;
+                Game.drawCards(exchanged);
+                UI.toast(`拍子替え：コンボ${exchanged}をドローへ変換`);
+            } else if (card.effect === 'pain_refund') {
+                State.battle.painRefund = card.upgraded ? .8 : .6;
+                UI.toast(`痛覚遮断：次のHP消費を${Math.round(State.battle.painRefund*100)}%回復`);
+            } else if (card.effect === 'blood_draw') {
+                Game.spendHp(State.hp*.18);
+                Game.drawCards(3);
+            } else if (card.effect === 'combo_guard') {
+                State.battle.comboGuard = true;
+                UI.toast('圧力循環：物理カードがブロックを生む');
+            } else if (card.effect === 'reclaim_spell') {
+                const candidates = State.battle.exhaustPile.filter(exhausted => exhausted.attr === 'int');
+                const reclaimed = candidates[Math.floor(Math.random()*candidates.length)];
+                if (reclaimed && State.battle.hand.length < 7) {
+                    State.battle.exhaustPile.splice(State.battle.exhaustPile.indexOf(reclaimed),1);
+                    State.battle.hand.push(reclaimed);
+                    UI.toast(`禁書回収：${reclaimed.name}を手札へ`);
+                } else UI.toast('回収できる魔力型カードがない');
+            } else if (card.effect === 'hp_flow') {
+                State.battle.hpFlow = true;
+                UI.toast('鼓動加速：各ターン最初のHP消費でドロー');
+            } else if (card.effect === 'burn_convert') {
+                const convertedBurn = State.battle.enemyBurn;
+                const convertedMana = Math.ceil(convertedBurn/2);
+                State.battle.enemyBurn = 0;
+                State.tempMana += convertedMana;
+                UI.toast(`焔還術：炎上${convertedBurn}を一時魔力${convertedMana}へ変換`);
+            } else if (card.effect === 'pain_dividend') {
+                State.battle.painDividend = true;
+                UI.toast('苦痛配当：次の被ダメージを資産化');
+            } else if (card.effect === 'phys_echo') {
+                State.battle.physEcho = card.upgraded ? .8 : .6;
+                UI.toast(`二重歩法：次の物理攻撃を${Math.round(State.battle.physEcho*100)}%追撃`);
+            } else if (card.effect === 'mana_armor') {
+                State.battle.manaArmor = true;
+                UI.toast('魔素装甲：一時魔力が被ダメージを肩代わり');
+            } else if (card.effect === 'combo_thresholds') {
+                State.battle.comboThresholds = true;
+                State.battle.comboStepsClaimed = [];
+                UI.toast('無尽階段：コンボ5刻みで加速');
+            } else if (card.effect === 'ignition_echo') {
+                State.battle.ignitionEcho = true;
+                UI.toast('火霊輪廻：引火するたび残響を獲得');
+            } else if (card.effect === 'hp_interest') {
+                State.battle.hpInterest = true;
+                UI.toast('血の利息：消費HPを攻撃・魔力へ');
+            } else if (card.effect === 'apex_str2') {
+                State.battle.apexPhysEcho = card.upgraded ? .55 : .4;
+                UI.traitActivation('attack','神速領域',`ALL PHYSICAL ECHO ${Math.round(State.battle.apexPhysEcho*100)}%`);
+            } else if (card.effect === 'apex_int2') {
+                State.battle.spellCadence = true;
+                State.battle.spellCadenceCount = 0;
+                UI.traitActivation('magic','万象魔典','EVERY 3 SPELLS / ACTION +1');
+            } else if (card.effect === 'apex_hp2') {
+                State.battle.phoenixHeart = true;
+                UI.traitActivation('vitality','不死鳥心臓','REVIVE 40% / BLOCK');
             } else if (card.effect === 'recycle') {
                 State.battle.drawPile.push(...Game.shuffle(State.battle.discardPile.splice(0)));
             } else if (card.effect === 'retain_block') {
@@ -1084,7 +1248,7 @@ const Game = {
                 const gain = card.val + Math.floor((State.maxHp - State.hp) / 10);
                 State.battle.playerTempStr += gain; UI.toast(`攻撃力 +${gain}`);
             } else if (card.effect === 'echo') {
-                State.battle.echo = (Number(State.battle.echo) || 0) + 1;
+                State.battle.echo = (Number(State.battle.echo) || 0) + (card.echoGain || 1);
                 UI.toast(`残響を蓄積！ 次の魔法は合計${State.battle.echo+1}回発動`);
             } else if (card.effect === 'mana_echo') {
                 const echoGain = card.upgraded ? 2 : 1;
@@ -1168,6 +1332,14 @@ const Game = {
             UI.toast('【特性】連撃の呼吸！ 行動権+1・1枚ドロー');
             UI.traitActivation('attack','連撃の呼吸','ACTION +1 / DRAW +1');
         }
+        if (State.battle.spellCadence && card.type === 'mag') {
+            State.battle.spellCadenceCount++;
+            if (State.battle.spellCadenceCount % 3 === 0) {
+                State.battle.actionsLeft++;
+                Game.drawCards(1);
+                UI.traitActivation('magic','万象魔典','3 SPELLS / ACTION +1 / DRAW +1');
+            }
+        }
 
         if ((card.exhaust || card.secretMod === 'sacrifice_circuit') && card.secretMod !== 'rebirth') {
             State.battle.exhaustPile.push(card);
@@ -1176,7 +1348,11 @@ const Game = {
         }
         
         if (State.hp <= 0) {
-            if (State.battle.immortal) { State.hp = 1; State.battle.immortal = false; UI.toast('不死身で反動を耐えた！'); }
+            if (State.battle.phoenixHeart) {
+                const rebirth = Math.ceil(State.maxHp*.4);
+                State.hp = rebirth; State.battle.block += rebirth; State.battle.phoenixHeart = false;
+                UI.traitActivation('vitality','不死鳥心臓',`HP ${rebirth} / BLOCK +${rebirth}`);
+            } else if (State.battle.immortal) { State.hp = 1; State.battle.immortal = false; UI.toast('不死身で反動を耐えた！'); }
             else { Game.gameOver(); return; }
         }
         if (State.battle.enemy.hp <= 0) {
@@ -1239,6 +1415,10 @@ const Game = {
             } else {
                 State.tempMana += 10;
                 State.battle.enemyIgnited = true;
+            }
+            if (State.battle.ignitionEcho) {
+                State.battle.echo = (Number(State.battle.echo)||0)+1;
+                UI.toast('火霊輪廻：残響+1');
             }
             // 致死爆発でも勝利演出へ急いで遷移せず、爆発とカットインを見せ切る。
             State.battle.pendingFx = Math.max(State.battle.pendingFx || 0, 400);
@@ -1313,10 +1493,14 @@ const Game = {
                 hpCost = Math.min(Math.max(0,State.hp-1),Math.floor(State.hp*(card.scale||.5)));
                 amount = Math.floor(hpCost * (card.extraMult || 3));
             }
+            if (card.extra === 'redline_blast') {
+                hpCost = Math.min(Math.max(0,State.hp-1),Math.floor(State.hp*.25));
+                amount = Math.floor(hpCost*3+(State.maxHp-(State.hp-hpCost))*.3);
+            }
             if (card.extra === 'execute' && State.battle.enemy.hp <= State.battle.enemy.maxHp * .3) amount *= 2;
             if (card.extra === 'intent_counter' && ['heavy','drain'].includes(State.battle.enemy.intent)) amount *= 2;
-            const hits = card.hits || 1;
-            let enemyBlock = State.battle.enemy.block || 0;
+            const hits = card.extra === 'combo_hit_bonus' && State.battle.combo >= 4 ? 4 : (card.hits || 1);
+            let enemyBlock = card.extra === 'shatter_block' ? 0 : (State.battle.enemy.block || 0);
             let vulnerableStacks = State.battle.enemyVulnerable;
             let breakthroughMultiplier = State.battle.breakthrough || 1;
             const hitAmounts = [];
@@ -1334,6 +1518,8 @@ const Game = {
                 const absorbed = Math.min(enemyBlock,hit); enemyBlock -= absorbed; hit -= absorbed;
                 hitAmounts.push(hit); total += hit;
             }
+            if (State.battle.physEcho > 0) total += Math.floor(amount*hits*State.battle.physEcho);
+            if (State.battle.apexPhysEcho > 0) total += Math.floor(amount*hits*State.battle.apexPhysEcho);
             const flowReady = State.playerType === 'str' && !State.battle.strFlowTriggered && State.battle.combo < 3 && State.battle.combo + hits >= 3;
             return `${card.hits ? `${hitAmounts.join('+')} → ` : ''}予測 ${total} DMG${hpCost ? ` / HP-${hpCost}` : ''}${flowReady ? ' / 連撃の呼吸' : ''}`;
         }
@@ -1342,6 +1528,7 @@ const Game = {
             const previewManaSpent = card.consumeAllMana ? State.tempMana : (card.manaCost || 0);
             if (card.extra === 'temp_mana_burst') amount += previewManaSpent * 4;
             if (card.extra === 'temp_mana_flat_burst') amount += previewManaSpent*(card.manaFlat||8);
+            if (card.extra === 'hand_burst') amount += Math.floor(int*.8*State.battle.hand.length);
             const echoStacks = Math.max(0,Number(State.battle.echo)||0);
             let enemyBlock = State.battle.enemy.block || 0;
             let total = 0;
@@ -1366,15 +1553,31 @@ const Game = {
             if (card.extra === 'maxhp_block') block = Math.min(card.upgraded?(card.upgradedBlockCap||75):(card.blockCap||60),Math.floor(State.maxHp*(card.scale||.5)));
             if (card.extra === 'intent_block') block = Game.incomingDamage();
             if (card.extra === 'revenge_guard') block = Game.incomingDamage() + Math.floor((State.maxHp-State.hp)*.2);
+            if (card.extra === 'mana_to_block') block = Math.floor(int*card.val) + State.tempMana*4;
+            if (card.extra === 'combo_block') block += State.battle.combo*3;
+            if (card.extra === 'missing_hp_block_high') block += Math.floor((State.maxHp-State.hp)*.6);
             if (State.battle.playerFrail) block = Math.max(1,Math.floor(block*.75));
             if (card.secretMod === 'anchor') block = Math.ceil(block * 1.5);
             return `ブロック +${block}${hpCost ? ` / HP-${hpCost}` : ''}`;
         }
-        if (card.type === 'heal') { const baseHeal = Game.getCardHeal(card); const heal = card.extra==='low_hp_double' && State.hp<=State.maxHp/2 ? baseHeal*2 : baseHeal; return `HP +${Math.min(State.maxHp-State.hp, heal)}（最大HPの${Math.round(card.healRate*100)}%${card.extra==='low_hp_double'&&State.hp<=State.maxHp/2?'×2':''}）`; }
+        if (card.type === 'heal') {
+            const baseHeal = Game.getCardHeal(card);
+            let heal = card.extra==='low_hp_double' && State.hp<=State.maxHp/2 ? baseHeal*2 : baseHeal;
+            if (card.extra === 'block_to_heal') heal += State.battle.block;
+            const actual = Math.min(State.maxHp-State.hp,heal);
+            const surplus = card.extra === 'overheal_block' ? Math.max(0,heal-(State.maxHp-State.hp))*2 : 0;
+            return `HP +${actual}${surplus ? ` / ブロック +${surplus}` : ''}`;
+        }
         return '効果を発動・続けてタップ';
     },
 
     describeCard: (card) => {
+        if (card.unlockLevel >= 11) {
+            const original = CARDS_DB.find(definition => definition.id === card.id);
+            const upgraded = card.upgraded ? '【強化済み：威力・回復・炎上・ドローなど強化対象を1.5倍】' : '';
+            const secret = card.secretMod && SECRET_MODS[card.secretMod] ? `【秘伝・${SECRET_MODS[card.secretMod].name}】${SECRET_MODS[card.secretMod].desc}` : '';
+            return `${original?.desc || card.desc}${upgraded}${secret}`;
+        }
         const pct = value => Math.round(value * 100);
         const suffix = [];
         if (card.draw) suffix.push(`${card.draw}枚引く`);
@@ -1559,6 +1762,12 @@ const Game = {
                 State.hp += pulse;
                 if (pulse > 0) { UI.combatNumber(pulse,'heal','player-battle-avatar'); UI.traitActivation('vitality','第二の心臓',`HP +${pulse}`); }
             }
+            if (State.battle.hpInterest && State.battle.hpSpentThisTurn >= 10) {
+                const interest = Math.floor(State.battle.hpSpentThisTurn/10);
+                State.battle.playerTempStr += interest;
+                State.battle.playerTempInt += interest;
+                UI.traitActivation('vitality','血の利息',`ATK / MAG +${interest}`);
+            }
         }
 
         while(State.battle.hand.length > 0) {
@@ -1640,6 +1849,13 @@ const Game = {
             await new Promise(resolve => setTimeout(resolve, 300));
             Game.advanceEnemyTurn(); return;
         }
+        if (State.battle.manaArmor && State.tempMana > 0 && dmg > 0) {
+            const manaUsed = Math.min(State.tempMana,Math.ceil(dmg/3));
+            const prevented = Math.min(dmg,manaUsed*3);
+            State.tempMana -= manaUsed;
+            dmg -= prevented;
+            UI.toast(`魔素装甲：一時魔力${manaUsed}で${prevented}ダメージ軽減`);
+        }
         let blocked = Math.min(State.battle.block, dmg);
         
         // ブロック消費
@@ -1651,6 +1867,12 @@ const Game = {
             State.runStats.damageTaken += actualDmg;
             UI.hitPlayer(actualDmg, enemy.intent === 'heavy');
             UI.toast(enemy.intent === 'multi' ? `${enemy.intentHits}連撃！ 合計${actualDmg}ダメージ` : `${actualDmg} のダメージを受けた！`);
+            if (State.battle.painDividend) {
+                State.battle.painDividend = false;
+                State.battle.block += actualDmg;
+                Game.drawCards(2);
+                UI.traitActivation('vitality','苦痛配当',`BLOCK +${actualDmg} / DRAW +2`);
+            }
         } else {
             Sound.play('block'); UI.combatNumber(blocked, 'block', 'player-battle-avatar');
             UI.toast(`ガードした！ (残ブロック${State.battle.block})`);
@@ -1658,7 +1880,11 @@ const Game = {
 
         if (enemy.intent === 'drain' && actualDmg > 0) enemy.hp = Math.min(enemy.maxHp, enemy.hp + actualDmg);
         if (State.hp <= 0) {
-            if (State.battle.immortal) { State.hp = 1; State.battle.immortal = false; UI.toast('不死身で耐えた！'); }
+            if (State.battle.phoenixHeart) {
+                const rebirth = Math.ceil(State.maxHp*.4);
+                State.hp = rebirth; State.battle.block += rebirth; State.battle.phoenixHeart = false;
+                UI.traitActivation('vitality','不死鳥心臓',`HP ${rebirth} / BLOCK +${rebirth}`);
+            } else if (State.battle.immortal) { State.hp = 1; State.battle.immortal = false; UI.toast('不死身で耐えた！'); }
             else { Game.gameOver(); return; }
         }
         if (State.battle.counterMagic) {
