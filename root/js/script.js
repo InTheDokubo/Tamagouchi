@@ -89,6 +89,19 @@ const SECRET_MOD_COST = 100;
 // 公開コミットでは、プレイヤー向けの変更をこの一覧の先頭へ追加する。
 const ANNOUNCEMENTS = [
     {
+        id:'life-conversion-preview-fix',
+        date:'2026.07.30',
+        title:'生命転換の不具合修正',
+        intro:'生命転換のダメージ予測が0と表示されることがある不具合を修正しました。',
+        sections:[
+            { heading:'修正内容', items:[
+                '生命転換の予測値に、保持中の全ブロックと消費予定HPを正しく反映',
+                '敵のブロックに吸収される場合も総攻撃値を0にせず、HPダメージとブロック吸収量を分けて表示',
+                'カード使用後もプレイヤーのブロックが消費されない現在の仕様を維持'
+            ]}
+        ]
+    },
+    {
         id:'major-level-20-update',
         date:'2026.07.29',
         title:'大幅アップデート',
@@ -1550,6 +1563,8 @@ const Game = {
             let breakthroughMultiplier = State.battle.breakthrough || 1;
             const hitAmounts = [];
             let total = 0;
+            let totalImpact = 0;
+            let totalAbsorbed = 0;
             for (let k=0;k<hits;k++) {
                 let hit = Math.floor(amount * (1 + Math.min(5,State.battle.combo + k) * .1));
                 if (breakthroughMultiplier > 1) {
@@ -1560,13 +1575,18 @@ const Game = {
                     hit = Math.floor(hit * (1 + vulnerableStacks * .5));
                     vulnerableStacks = 0;
                 }
+                totalImpact += hit;
                 const absorbed = Math.min(enemyBlock,hit); enemyBlock -= absorbed; hit -= absorbed;
+                totalAbsorbed += absorbed;
                 hitAmounts.push(hit); total += hit;
             }
             if (State.battle.physEcho > 0) total += Math.floor(amount*hits*State.battle.physEcho);
             if (State.battle.apexPhysEcho > 0) total += Math.floor(amount*hits*State.battle.apexPhysEcho);
             const flowReady = State.playerType === 'str' && !State.battle.strFlowTriggered && State.battle.combo < 3 && State.battle.combo + hits >= 3;
             const readBonus = card.extra === 'sword_saint_read' ? (State.battle.enemy.intent === 'atk' ? ' / 必ず回避' : ' / 1枚ドロー・続けて行動') : '';
+            if (card.extra === 'block_hp_sacrifice') {
+                return `予測 ${totalImpact} DMG（HP ${total} / BLOCK ${totalAbsorbed}）${hpCost ? ` / HP-${hpCost}` : ''}`;
+            }
             return `${card.hits ? `${hitAmounts.join('+')} → ` : ''}予測 ${total} DMG${hpCost ? ` / HP-${hpCost}` : ''}${flowReady ? ' / 連撃の呼吸' : ''}${readBonus}`;
         }
         if (card.type === 'mag') {
